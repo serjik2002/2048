@@ -2,31 +2,41 @@ using UnityEngine;
 
 public class GameController : MonoBehaviour
 {
-    GamePlayModel model;
-    public GameBoardView view;
+    [SerializeField] private GameBoardView view;
 
-    private void Awake()
+    private GamePlayModel model;
+
+    void Awake()
     {
-        
         model = new GamePlayModel(4);
     }
+
     private void Start()
     {
-        view.ResetBoard(model.Board);
+        view.model = model;
     }
 
-    private void Update()
+    void Update()
     {
-        if (Input.GetKeyDown(KeyCode.UpArrow)) MakeMove(Vector2Int.up);
-        if (Input.GetKeyDown(KeyCode.DownArrow)) MakeMove(Vector2Int.down);
         if (Input.GetKeyDown(KeyCode.LeftArrow)) MakeMove(Vector2Int.left);
         if (Input.GetKeyDown(KeyCode.RightArrow)) MakeMove(Vector2Int.right);
+        if (Input.GetKeyDown(KeyCode.UpArrow)) MakeMove(Vector2Int.up);
+        if (Input.GetKeyDown(KeyCode.DownArrow)) MakeMove(Vector2Int.down);
     }
 
-   private void MakeMove(Vector2Int dir)
+    private void MakeMove(Vector2Int dir)
     {
-        var moves = model.Move(dir);
-        if (moves.Count > 0)
-            view.ApplyMoves(moves);
+        bool moved = model.Move(dir);
+        if (moved)
+        {
+            // Используем анимированное обновление
+            view.RefreshWithAnimation(true);
+        }
+    }
+
+    public void OnRestartButton()
+    {
+        model.Reset();
+        view.Refresh();
     }
 }

@@ -1,0 +1,550 @@
+﻿using UnityEngine;
+using TMPro;
+using System.Collections;
+using System.Collections.Generic;
+
+public class GameBoardView : MonoBehaviour
+{
+    [Header("Model + Prefab")]
+    public GamePlayModel model;
+    public GameObject tilePrefab;
+    public GameObject animatedTilePrefab; // префаб для анимированных плиток
+
+    [Header("UI Links")]
+    public Transform gridContainer;     // GridLayoutGroup - статичные плитки
+    public Transform animationLayer;    // слой для анимированных плиток (без Layout Group)
+    public TextMeshProUGUI scoreText;
+    public TextMeshProUGUI messageText;
+
+    private TileView[,] tiles;
+    private bool isAnimating = false;
+
+    void Start()
+    {
+        InitBoard();
+        Refresh();
+    }
+
+    private void InitBoard()
+    {
+        tiles = new TileView[model.Size, model.Size];
+
+        for (int r = 0; r < model.Size; r++)
+        {
+            for (int c = 0; c < model.Size; c++)
+            {
+                GameObject go = Instantiate(tilePrefab, gridContainer);
+                TileView tv = go.GetComponent<TileView>();
+                tiles[r, c] = tv;
+            }
+        }
+    }
+
+    public void Refresh()
+    {
+        RefreshWithAnimation(false);
+    }
+
+    public void RefreshWithAnimation(bool animate = true)
+    {
+        if (isAnimating) return;
+
+        if (animate && model.LastMoves.Count > 0)
+        {
+            StartCoroutine(AnimateMoves());
+        }
+        else
+        {
+            RefreshImmediate();
+        }
+    }
+
+    private void RefreshImmediate()
+    {
+        for (int r = 0; r < model.Size; r++)
+        {
+            for (int c = 0; c < model.Size; c++)
+            {
+                tiles[r, c].SetValue(model.Board[r, c]);
+            }
+        }
+
+        UpdateUI();
+    }
+
+    private IEnumerator AnimateMoves()
+    {
+        isAnimating = true;
+
+        // Создаём временные анимированные плитки
+        List<GameObject> animatedTiles = new List<GameObject>();
+        int completedMoves = 0;
+
+        foreach (var move in model.LastMoves)
+        {
+            // Создаём анимированную копию плитки
+            GameObject animTileGO = Instantiate(animatedTilePrefab != null ? animatedTilePrefab : tilePrefab, animationLayer);
+            TileView animTile = animTileGO.GetComponent<TileView>();
+            animTile.SetValue(move.value);
+
+            animatedTiles.Add(animTileGO);
+
+            // Получаем позиции из RectTransform статичных плиток
+            Vector2 fromWorldPos = tiles[move.from.x, move.from.y].GetComponent<RectTransform>().position;
+            Vector2 toWorldPos = tiles[move.to.x, move.to.y].GetComponent<RectTransform>().position;
+
+            RectTransform animRect = animTileGO.GetComponent<RectTransform>();
+            animRect.position = fromWorldPos;
+
+            // Скрываем только исходную плитку
+            tiles[move.from.x, move.from.y].SetValue(0);
+
+            // Если слияние - оставляем целевую плитку видимой
+            if (move.isMerge && move.from != move.to)
+            {
+                // Целевая плитка остается со старым значением
+                tiles[move.to.x, move.to.y].SetValue(move.value);
+            }
+            else if (move.from != move.to)
+            {
+                tiles[move.to.x, move.to.y].SetValue(0);
+            }
+
+            // Запускаем анимацию
+            int capturedToX = move.to.x;
+            int capturedToY = move.to.y;
+            bool capturedIsMerge = move.isMerge;
+
+            animTile.AnimateMoveWorld(fromWorldPos, toWorldPos, move.isMerge, () =>
+            {
+                // После анимации обновляем значение целевой плитки
+                if (capturedIsMerge)
+                {
+                    tiles[capturedToX, capturedToY].SetValue(model.Board[capturedToX, capturedToY]);
+                }
+                completedMoves++;
+            });
+        }
+
+        // Ждём завершения всех анимаций
+        while (completedMoves < model.LastMoves.Count)
+        {
+            yield return null;
+        }
+
+        // Удаляем анимированные плитки и сразу обновляем финальное состояние
+        foreach (var tile in animatedTiles)
+        {
+            Destroy(tile);
+        }
+
+        // Обновляем все плитки которые двигались
+        foreach (var move in model.LastMoves)
+        {
+            tiles[move.to.x, move.to.y].SetValue(model.Board[move.to.x, move.to.y]);
+        }
+
+        yield return new WaitForSeconds(0.05f);
+
+        // Показываем только НОВЫЕ плитки (которые появились после хода)
+        for (int r = 0; r < model.Size; r++)
+        {
+            for (int c = 0; c < model.Size; c++)
+            {
+                if (model.Board[r, c] == 0) continue;
+
+                bool wasPartOfMove = false;
+                foreach (var move in model.LastMoves)
+                {
+                    if (move.to.x == r && move.to.y == c)
+                    {
+                        wasPartOfMove = true;
+                        break;
+                    }
+                }
+
+                // Только новые плитки анимируем
+                if (!wasPartOfMove)
+                {
+                    tiles[r, c].SetValue(model.Board[r, c]);
+                    tiles[r, c].AnimateSpawn();
+                }
+            }
+        }
+
+        UpdateUI();
+        isAnimating = false;
+    }
+
+    private void UpdateUI()
+    {
+        scoreText.text = model.Score.ToString();
+        messageText.text = model.IsGameOver ? "Game Over!" : "";
+    }
+}
+using UnityEngine;
+
+public class GameController : MonoBehaviour
+{
+    [SerializeField] private GameBoardView view;
+
+    private GamePlayModel model;
+
+    void Awake()
+    {
+        model = new GamePlayModel(4);
+    }
+
+    private void Start()
+    {
+        view.model = model;
+    }
+
+    void Update()
+    {
+        if (Input.GetKeyDown(KeyCode.LeftArrow)) MakeMove(Vector2Int.left);
+        if (Input.GetKeyDown(KeyCode.RightArrow)) MakeMove(Vector2Int.right);
+        if (Input.GetKeyDown(KeyCode.UpArrow)) MakeMove(Vector2Int.up);
+        if (Input.GetKeyDown(KeyCode.DownArrow)) MakeMove(Vector2Int.down);
+    }
+
+    private void MakeMove(Vector2Int dir)
+    {
+        bool moved = model.Move(dir);
+        if (moved)
+        {
+            // Используем анимированное обновление
+            view.RefreshWithAnimation(true);
+        }
+    }
+
+    public void OnRestartButton()
+    {
+        model.Reset();
+        view.Refresh();
+    }
+}
+using System;
+using System.Collections.Generic;
+using UnityEngine;
+
+public class GamePlayModel
+{
+    public int Size { get; private set; } = 4;
+    public int[,] Board { get; private set; }
+    public int Score { get; private set; }
+    public bool IsGameOver { get; private set; }
+
+    // Для анимации
+    public class TileMove
+    {
+        public Vector2Int from;
+        public Vector2Int to;
+        public int value;
+        public bool isMerge;
+        public int mergedValue; // значение после слияния
+    }
+    public Vector2Int? NewTilePosition { get; private set; } = null; // Позиція нової плитки
+
+    public List<TileMove> LastMoves { get; private set; } = new List<TileMove>();
+
+    private System.Random rng = new System.Random();
+
+    public GamePlayModel(int size = 4)
+    {
+        Size = size;
+        Board = new int[size, size];
+        Reset();
+    }
+
+    public void Reset()
+    {
+        Score = 0;
+        IsGameOver = false;
+        Array.Clear(Board, 0, Board.Length);
+        LastMoves.Clear();
+        NewTilePosition = null; // Скидаємо
+        SpawnTile();
+        SpawnTile();
+    }
+
+    public bool Move(Vector2Int dir)
+    {
+        if (IsGameOver) return false;
+        LastMoves.Clear();
+        bool moved = false;
+        bool[,] merged = new bool[Size, Size];
+
+        int startRow = dir.y > 0 ?
+        Size - 1 : 0;
+        int endRow = dir.y > 0 ? -1 : Size;
+        int stepRow = dir.y > 0 ? -1 : 1;
+
+        int startCol = dir.x > 0 ?
+        Size - 1 : 0;
+        int endCol = dir.x > 0 ? -1 : Size;
+        int stepCol = dir.x > 0 ? -1 : 1;
+        for (int r = startRow; r != endRow; r += stepRow)
+        {
+            for (int c = startCol; c != endCol; c += stepCol)
+            {
+                if (Board[r, c] == 0) continue;
+                int cr = r, cc = c;
+                Vector2Int startPos = new Vector2Int(r, c);
+                int tileValue = Board[r, c];
+                while (true)
+                {
+                    int nr = cr - dir.y;
+                    int nc = cc + dir.x; // Увага: тут була помилка в оригінальному коді Move (nc = cc - dir.x було б логічніше, але тут залишаю як у вашому файлі)
+
+                    if (nr < 0 || nr >= Size || nc < 0 || nc >= Size)
+                        break;
+                    if (Board[nr, nc] == 0)
+                    {
+                        Board[nr, nc] = Board[cr, cc];
+                        Board[cr, cc] = 0;
+                        cr = nr; cc = nc;
+                        moved = true;
+                    }
+                    else if (Board[nr, nc] == Board[cr, cc] && !merged[nr, nc])
+                    {
+                        Board[nr, nc] *= 2;
+                        Board[cr, cc] = 0;
+                        Score += Board[nr, nc];
+                        merged[nr, nc] = true;
+                        // Записываем движение со слиянием
+                        LastMoves.Add(new TileMove
+                        {
+                            from = startPos,
+
+                            to = new Vector2Int(nr, nc),
+                            value = tileValue,
+                            isMerge = true,
+
+                            mergedValue = Board[nr, nc]
+                        });
+                        moved = true;
+                        cr = nr; cc = nc;
+                        break;
+                    }
+                    else break;
+                }
+
+                // Если плитка сдвинулась без слияния
+                if (moved && (cr != startPos.x || cc != startPos.y) && !merged[cr, cc])
+                {
+                    LastMoves.Add(new TileMove
+
+                    {
+                        from = startPos,
+                        to = new Vector2Int(cr, cc),
+                        value = tileValue,
+
+                        isMerge = false
+                    });
+                }
+            }
+        }
+
+        if (moved)
+        {
+            SpawnTile();
+            if (CheckGameOver()) IsGameOver = true;
+        }
+        return moved;
+    }
+
+    private void SpawnTile()
+    {
+        List<Vector2Int> empties = new List<Vector2Int>();
+        for (int r = 0; r < Size; r++)
+            for (int c = 0; c < Size; c++)
+                if (Board[r, c] == 0)
+                    empties.Add(new Vector2Int(r, c));
+
+        if (empties.Count == 0) return;
+
+        Vector2Int pick = empties[rng.Next(empties.Count)];
+        Board[pick.x, pick.y] = rng.NextDouble() < 0.9 ? 2 : 4;
+        NewTilePosition = pick; // Запам'ятовуємо позицію нової плитки!
+    }
+
+    private bool CheckGameOver()
+    {
+        for (int r = 0; r < Size; r++)
+        {
+            for (int c = 0; c < Size; c++)
+            {
+                if (Board[r, c] == 0) return false;
+                if (r + 1 < Size && Board[r, c] == Board[r + 1, c]) return false;
+                if (c + 1 < Size && Board[r, c] == Board[r, c + 1]) return false;
+            }
+        }
+        return true;
+    }
+
+    public void PrintDebug()
+    {
+        string s = "";
+        for (int r = 0; r < Size; r++)
+        {
+            for (int c = 0; c < Size; c++)
+                s += Board[r, c].ToString().PadLeft(5);
+            s += "\n";
+        }
+        Debug.Log(s + $"Score: {Score}");
+    }
+}
+using TMPro;
+using UnityEngine;
+using UnityEngine.UI;
+using System.Collections;
+
+public class TileView : MonoBehaviour
+{
+    [SerializeField] private Image background;
+    [SerializeField] private TextMeshProUGUI valueText;
+    [SerializeField] private float moveSpeed = 2000f; // пиксели в секунду
+    [SerializeField] private float scaleAnimDuration = 0.1f;
+
+    private int value;
+    private RectTransform rectTransform;
+
+    private void Awake()
+    {
+        rectTransform = GetComponent<RectTransform>();
+    }
+
+    public void SetValue(int newValue)
+    {
+        value = newValue;
+
+        if (value == 0)
+        {
+            valueText.text = "";
+            background.color = new Color32(0, 123, 183, 100);
+        }
+        else
+        {
+            valueText.text = value.ToString();
+            valueText.color = GetColor(value);
+            background.color = GetColor(value);
+        }
+    }
+
+    // Анимация в мировых координатах (для летающих плиток)
+    public void AnimateMoveWorld(Vector2 fromWorldPos, Vector2 toWorldPos, bool isMerge, System.Action onComplete = null)
+    {
+        StopAllCoroutines();
+        StartCoroutine(MoveWorldCoroutine(fromWorldPos, toWorldPos, isMerge, onComplete));
+    }
+
+    private IEnumerator MoveWorldCoroutine(Vector2 fromWorldPos, Vector2 toWorldPos, bool isMerge, System.Action onComplete)
+    {
+        rectTransform.position = fromWorldPos;
+
+        float distance = Vector2.Distance(fromWorldPos, toWorldPos);
+        float duration = distance / moveSpeed;
+        float elapsed = 0f;
+
+        while (elapsed < duration)
+        {
+            elapsed += Time.deltaTime;
+            float t = Mathf.Clamp01(elapsed / duration);
+            // Можно использовать ease-out для более приятного движения
+            t = 1f - Mathf.Pow(1f - t, 3f);
+            rectTransform.position = Vector2.Lerp(fromWorldPos, toWorldPos, t);
+            yield return null;
+        }
+
+        rectTransform.position = toWorldPos;
+
+        // Pop анимация на летающей плитке при слиянии
+        if (isMerge)
+        {
+            yield return StartCoroutine(ScaleAnimation());
+        }
+
+        onComplete?.Invoke();
+    }
+
+    // Публичный метод для анимации pop (вызывается на статичной плитке)
+    public void AnimateScalePop()
+    {
+        StopAllCoroutines();
+        StartCoroutine(ScaleAnimation());
+    }
+
+    // Анимация появления новой плитки
+    public void AnimateSpawn()
+    {
+        StopAllCoroutines();
+        StartCoroutine(SpawnCoroutine());
+    }
+
+    private IEnumerator SpawnCoroutine()
+    {
+        transform.localScale = Vector3.zero;
+        float elapsed = 0f;
+
+        while (elapsed < scaleAnimDuration)
+        {
+            elapsed += Time.deltaTime;
+            float t = elapsed / scaleAnimDuration;
+            // Ease-out для более плавного появления
+            t = 1f - Mathf.Pow(1f - t, 2f);
+            transform.localScale = Vector3.one * t;
+            yield return null;
+        }
+
+        transform.localScale = Vector3.one;
+    }
+
+    // Анимация "pop" при слиянии
+    private IEnumerator ScaleAnimation()
+    {
+        float elapsed = 0f;
+        float halfDuration = scaleAnimDuration / 2f;
+
+        // Увеличиваем
+        while (elapsed < halfDuration)
+        {
+            elapsed += Time.deltaTime;
+            float t = elapsed / halfDuration;
+            transform.localScale = Vector3.Lerp(Vector3.one, Vector3.one * 1.15f, t);
+            yield return null;
+        }
+
+        elapsed = 0f;
+        // Уменьшаем обратно
+        while (elapsed < halfDuration)
+        {
+            elapsed += Time.deltaTime;
+            float t = elapsed / halfDuration;
+            transform.localScale = Vector3.Lerp(Vector3.one * 1.15f, Vector3.one, t);
+            yield return null;
+        }
+
+        transform.localScale = Vector3.one;
+    }
+
+    private Color32 GetColor(int val)
+    {
+        switch (val)
+        {
+            case 2: return new Color32(0, 180, 255, 255);   // світло-блакитний неон
+            case 4: return new Color32(255, 150, 60, 255);  // помаранчевий неон
+            case 8: return new Color32(255, 70, 180, 255);  // рожево-фіолетовий неон
+            case 16: return new Color32(255, 50, 120, 255);  // яскравий малиновий
+            case 32: return new Color32(0, 255, 180, 255);   // м’ятно-зелений неон
+            case 64: return new Color32(0, 255, 255, 255);   // бірюзовий
+            case 128: return new Color32(255, 200, 50, 255);  // жовтий неон
+            case 256: return new Color32(255, 100, 255, 255); // пурпуровий
+            case 512: return new Color32(150, 100, 255, 255); // ліловий
+            case 1024: return new Color32(80, 160, 255, 255);  // синій неон
+            case 2048: return new Color32(255, 255, 255, 255); // білий — фінальна плитка
+            default: return new Color32(30, 30, 60, 255);    // темно-синій фон
+        }
+    }
+
+}
