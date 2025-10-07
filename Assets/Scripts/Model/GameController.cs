@@ -3,6 +3,7 @@ using UnityEngine;
 public class GameController : MonoBehaviour
 {
     [SerializeField] private GameBoardView view;
+    [SerializeField] private InputHandler _inputHandler;
 
     private GamePlayModel model;
 
@@ -13,15 +14,18 @@ public class GameController : MonoBehaviour
 
     private void Start()
     {
+        _inputHandler.OnMoveInput += MakeMove;
         view.model = model;
     }
 
     void Update()
     {
-        if (Input.GetKeyDown(KeyCode.LeftArrow)) MakeMove(Vector2Int.left);
-        if (Input.GetKeyDown(KeyCode.RightArrow)) MakeMove(Vector2Int.right);
-        if (Input.GetKeyDown(KeyCode.UpArrow)) MakeMove(Vector2Int.up);
-        if (Input.GetKeyDown(KeyCode.DownArrow)) MakeMove(Vector2Int.down);
+
+        // Отладочная перезагрузка
+        if (Input.GetKeyDown(KeyCode.R))
+        {
+            OnRestartButton();
+        }
     }
 
     private void MakeMove(Vector2Int dir)
@@ -35,6 +39,12 @@ public class GameController : MonoBehaviour
     }
 
     public void OnRestartButton()
+    {
+        model.Reset();
+        view.Refresh();
+    }
+
+    public void Reload()
     {
         model.Reset();
         view.Refresh();

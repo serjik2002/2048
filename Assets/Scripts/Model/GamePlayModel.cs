@@ -1,34 +1,41 @@
-using System;
+п»їusing System;
 using System.Collections.Generic;
+using System.Linq;
 using UnityEngine;
 
+[Serializable]
 public class GamePlayModel
 {
     public int Size { get; private set; } = 4;
     public int[,] Board { get; private set; }
     public int Score { get; private set; }
+    public int MaxScore { get; private set; }
     public bool IsGameOver { get; private set; }
 
-    // Для анимации
     public class TileMove
     {
         public Vector2Int from;
         public Vector2Int to;
         public int value;
         public bool isMerge;
-        public int mergedValue; // значение после слияния
+        public int mergedValue;
     }
-    public Vector2Int? NewTilePosition { get; private set; } = null; // Позиция новой плитки
 
+    public Vector2Int? NewTilePosition { get; private set; } = null;
     public List<TileMove> LastMoves { get; private set; } = new List<TileMove>();
-
     private System.Random rng = new System.Random();
+
+    private const string SAVE_KEY = "GameSaveData";
 
     public GamePlayModel(int size = 4)
     {
         Size = size;
         Board = new int[size, size];
-        Reset();
+        Load(); // рџ‘€ СЃРїСЂРѕР±СѓС”РјРѕ Р·Р°РІР°РЅС‚Р°Р¶РёС‚Рё С–СЃРЅСѓСЋС‡Сѓ СЃРµСЃС–СЋ
+        if (IsEmpty())
+        {
+            Reset();
+        }
     }
 
     public void Reset()
@@ -40,13 +47,14 @@ public class GamePlayModel
         NewTilePosition = null;
         SpawnTile();
         SpawnTile();
+        Save();
     }
 
     public bool Move(Vector2Int dir)
     {
         if (IsGameOver) return false;
         LastMoves.Clear();
-        NewTilePosition = null; // Сбрасываем перед ходом
+        NewTilePosition = null;
 
         bool moved = false;
         bool[,] merged = new bool[Size, Size];
@@ -59,80 +67,90 @@ public class GamePlayModel
         int endCol = dir.x > 0 ? -1 : Size;
         int stepCol = dir.x > 0 ? -1 : 1;
 
+        List<TileMove> tempMoves = new List<TileMove>();
+
         for (int r = startRow; r != endRow; r += stepRow)
         {
             for (int c = startCol; c != endCol; c += stepCol)
             {
                 if (Board[r, c] == 0) continue;
 
-                int cr = r, cc = c;
+                int currentR = r;
+                int currentC = c;
                 Vector2Int startPos = new Vector2Int(r, c);
                 int tileValue = Board[r, c];
-                bool thisTileMoved = false;
-                bool thisTileMerged = false;
+                bool movedThisTile = false;
+                Vector2Int finalPos = startPos;
 
                 while (true)
                 {
-                    int nr = cr - dir.y;
-                    int nc = cc + dir.x;
+                    int nextR = currentR + dir.y;
+                    int nextC = currentC + dir.x;
 
-                    if (nr < 0 || nr >= Size || nc < 0 || nc >= Size)
+                    if (nextR < 0 || nextR >= Size || nextC < 0 || nextC >= Size)
                         break;
 
-                    if (Board[nr, nc] == 0)
+                    if (Board[nextR, nextC] == 0)
                     {
-                        Board[nr, nc] = Board[cr, cc];
-                        Board[cr, cc] = 0;
-                        cr = nr; cc = nc;
-                        thisTileMoved = true;
+                        Board[nextR, nextC] = Board[currentR, currentC];
+                        Board[currentR, currentC] = 0;
+                        currentR = nextR;
+                        currentC = nextC;
+                        finalPos = new Vector2Int(currentR, currentC);
+                        movedThisTile = true;
                         moved = true;
                     }
-                    else if (Board[nr, nc] == Board[cr, cc] && !merged[nr, nc])
+                    else if (Board[nextR, nextC] == Board[currentR, currentC] && !merged[nextR, nextC])
                     {
-                        Board[nr, nc] *= 2;
-                        Board[cr, cc] = 0;
-                        Score += Board[nr, nc];
-                        merged[nr, nc] = true;
+                        int newValue = Board[nextR, nextC] * 2;
+                        Board[nextR, nextC] = newValue;
+                        Board[currentR, currentC] = 0;
+                        Score += newValue;
+                        if (Score > MaxScore) MaxScore = Score; // рџ”Ґ РѕРЅРѕРІР»СЋС”РјРѕ maxScore
+                        merged[nextR, nextC] = true;
+                        movedThisTile = true;
+                        moved = true;
 
-                        // Записываем движение со слиянием
-                        LastMoves.Add(new TileMove
+                        tempMoves.Add(new TileMove
                         {
                             from = startPos,
-                            to = new Vector2Int(nr, nc),
+                            to = new Vector2Int(nextR, nextC),
                             value = tileValue,
                             isMerge = true,
-                            mergedValue = Board[nr, nc]
+                            mergedValue = newValue
                         });
-
-                        thisTileMoved = true;
-                        thisTileMerged = true;
-                        moved = true;
                         break;
                     }
-                    else
-                        
-                    // Если плитка сдвинулась БЕЗ слияния
-                    if (thisTileMoved && !thisTileMerged)
+                    else break;
+                }
+
+                if (movedThisTile && finalPos != startPos)
+                {
+                    bool alreadyAddedAsMerge = tempMoves.Any(m => m.from == startPos && m.isMerge);
+
+                    if (!alreadyAddedAsMerge)
                     {
-                        LastMoves.Add(new TileMove
+                        tempMoves.Add(new TileMove
                         {
                             from = startPos,
-                            to = new Vector2Int(cr, cc),
+                            to = finalPos,
                             value = tileValue,
                             isMerge = false
                         });
                     }
                 }
-
-                
             }
         }
+
+        LastMoves.AddRange(tempMoves);
 
         if (moved)
         {
             SpawnTile();
             if (CheckGameOver()) IsGameOver = true;
+            Save(); // рџ’ѕ Р·Р±РµСЂС–РіР°С”РјРѕ РїС–СЃР»СЏ РєРѕР¶РЅРѕРіРѕ С…РѕРґСѓ
         }
+
         return moved;
     }
 
@@ -148,7 +166,7 @@ public class GamePlayModel
 
         Vector2Int pick = empties[rng.Next(empties.Count)];
         Board[pick.x, pick.y] = rng.NextDouble() < 0.9 ? 2 : 4;
-        NewTilePosition = pick; // Запоминаем позицию новой плитки!
+        NewTilePosition = pick;
     }
 
     private bool CheckGameOver()
@@ -165,15 +183,75 @@ public class GamePlayModel
         return true;
     }
 
-    public void PrintDebug()
+    private bool IsEmpty()
     {
-        string s = "";
-        for (int r = 0; r < Size; r++)
+        foreach (int v in Board)
+            if (v != 0)
+                return false;
+        return true;
+    }
+
+    [Serializable]
+    private class SaveData
+    {
+        public int size;
+        public int[] flatBoard;
+        public int score;
+        public int maxScore;
+        public bool gameOver;
+    }
+
+    public void Save()
+    {
+        SaveData data = new SaveData
         {
+            size = Size,
+            flatBoard = Flatten(Board),
+            score = Score,
+            maxScore = MaxScore,
+            gameOver = IsGameOver
+        };
+
+        string json = JsonUtility.ToJson(data);
+        PlayerPrefs.SetString(SAVE_KEY, json);
+        PlayerPrefs.Save();
+    }
+
+    public void Load()
+    {
+        if (!PlayerPrefs.HasKey(SAVE_KEY)) return;
+
+        string json = PlayerPrefs.GetString(SAVE_KEY);
+        SaveData data = JsonUtility.FromJson<SaveData>(json);
+        if (data == null) return;
+
+        Size = data.size;
+        Board = Unflatten(data.flatBoard, Size);
+        Score = data.score;
+        MaxScore = data.maxScore;
+        IsGameOver = data.gameOver;
+    }
+
+    public void ClearSave()
+    {
+        PlayerPrefs.DeleteKey(SAVE_KEY);
+    }
+
+    private int[] Flatten(int[,] board)
+    {
+        int[] flat = new int[Size * Size];
+        int i = 0;
+        for (int r = 0; r < Size; r++)
             for (int c = 0; c < Size; c++)
-                s += Board[r, c].ToString().PadLeft(5);
-            s += "\n";
-        }
-        Debug.Log(s + $"Score: {Score}");
+                flat[i++] = board[r, c];
+        return flat;
+    }
+
+    private int[,] Unflatten(int[] flat, int size)
+    {
+        int[,] grid = new int[size, size];
+        for (int i = 0; i < flat.Length; i++)
+            grid[i / size, i % size] = flat[i];
+        return grid;
     }
 }

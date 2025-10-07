@@ -227,5 +227,5 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   background: {fileID: 4543743204520774922}
   valueText: {fileID: 4267410603374501715}
-  moveSpeed: 100
+  moveSpeed: 3000
   scaleAnimDuration: 0.1
