@@ -30,6 +30,10 @@ public class GameController : MonoBehaviour
 
     private void MakeMove(Vector2Int dir)
     {
+        if (view.IsAnimating)
+        {
+            return;
+        }
         bool moved = model.Move(dir);
         if (moved)
         {

@@ -34,7 +34,6 @@ public class TileView : MonoBehaviour
         else
         {
             valueText.text = value.ToString();
-
             // ВАЖНО: Всегда устанавливаем правильный цвет текста и фона
             Color32 tileColor = GetColor(value);
             valueText.color = GetColor(value);
@@ -103,50 +102,45 @@ public class TileView : MonoBehaviour
     }
 
     // Анимация появления новой плитки
-    public void AnimateSpawn()
+    // Тепер цей метод приймає значення нової плитки
+    public void AnimateSpawn(int newValue)
     {
         if (currentAnimation != null)
             StopCoroutine(currentAnimation);
-
-        currentAnimation = StartCoroutine(SpawnCoroutine());
+        currentAnimation = StartCoroutine(SpawnCoroutine(newValue));
     }
 
-    private IEnumerator SpawnCoroutine()
+    // Корутина також приймає значення
+    private IEnumerator SpawnCoroutine(int newValue)
     {
-        transform.localScale = Vector3.zero;
+        // Спочатку встановлюємо значення та масштаб 0
+        value = newValue;
 
-        // Убедимся, что цвет установлен правильно перед анимацией
+        // Тепер налаштовуємо вигляд (колір, текст).
+        // Плитка ще невидима, бо її масштаб 0.
         if (value != 0)
         {
+            transform.localScale = Vector3.zero;
+            valueText.text = value.ToString();
             Color32 tileColor = GetColor(value);
             background.color = tileColor;
             valueText.color = GetColor(value);
         }
+        else
+        {
+            valueText.text = "";
+            background.color = new Color32(0, 0, 0, 0);
+        }
 
+        // Запускаємо анімацію масштабування від 0 до 1
         float elapsed = 0f;
-
         while (elapsed < scaleAnimDuration)
         {
             elapsed += Time.deltaTime;
             float t = elapsed / scaleAnimDuration;
-
-            // Ease-out с небольшим overshoot
             t = 1f - Mathf.Pow(1f - t, 2f);
-            float scale = Mathf.Lerp(0f, 1.1f, t);
 
-            transform.localScale = Vector3.one * scale;
-            yield return null;
-        }
-
-        // Небольшой bounce назад
-        elapsed = 0f;
-        float bounceTime = 0.05f;
-
-        while (elapsed < bounceTime)
-        {
-            elapsed += Time.deltaTime;
-            float t = elapsed / bounceTime;
-            float scale = Mathf.Lerp(1.1f, 1f, t);
+            float scale = Mathf.Lerp(0f, 1f, t);
             transform.localScale = Vector3.one * scale;
             yield return null;
         }
@@ -211,18 +205,18 @@ public class TileView : MonoBehaviour
     {
         switch (val)
         {
-            case 2: return new Color32(0, 180, 255, 255);
-            case 4: return new Color32(255, 150, 60, 255);
-            case 8: return new Color32(255, 70, 180, 255);
-            case 16: return new Color32(255, 50, 120, 255);
-            case 32: return new Color32(0, 255, 180, 255);
-            case 64: return new Color32(0, 255, 255, 255);
-            case 128: return new Color32(255, 200, 50, 255);
-            case 256: return new Color32(255, 100, 255, 255);
-            case 512: return new Color32(150, 100, 255, 255);
-            case 1024: return new Color32(80, 160, 255, 255);
-            case 2048: return new Color32(255, 255, 255, 255);
-            default: return new Color32(30, 30, 60, 255);
+            case 2: return new Color32(0, 255, 255, 255);   // Яскравий Блакитний (Cyan)
+            case 4: return new Color32(128, 255, 0, 255);   // Неоновий Зелений
+            case 8: return new Color32(0, 255, 128, 255);   // Весняний Зелений
+            case 16: return new Color32(255, 255, 0, 255);   // Жовтий
+            case 32: return new Color32(255, 150, 0, 255);   // Помаранчевий
+            case 64: return new Color32(255, 100, 0, 255);   // Червоно-помаранчевий
+            case 128: return new Color32(255, 0, 0, 255);       // Червоний
+            case 256: return new Color32(255, 0, 100, 255);   // Малиновий
+            case 512: return new Color32(170, 0, 255, 255);   // Пурпурний
+            case 1024: return new Color32(80, 80, 255, 255);    // Глибокий Синій
+            case 2048: return new Color32(255, 255, 255, 255); // Сяючий Білий
+            default: return new Color32(30, 30, 60, 255);      // Колір за замовчуванням
         }
     }
 }

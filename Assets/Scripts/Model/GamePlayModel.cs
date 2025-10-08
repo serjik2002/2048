@@ -148,7 +148,7 @@ public class GamePlayModel
         {
             SpawnTile();
             if (CheckGameOver()) IsGameOver = true;
-            Save(); // 💾 зберігаємо після кожного ходу
+            Save();
         }
 
         return moved;
