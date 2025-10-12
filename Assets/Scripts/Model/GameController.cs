@@ -39,6 +39,7 @@ public class GameController : MonoBehaviour
         {
             // Используем анимированное обновление
             view.RefreshWithAnimation(true);
+            AdManager.Instance.ShowInterstitialAd();
         }
     }
 

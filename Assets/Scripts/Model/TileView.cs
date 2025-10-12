@@ -205,18 +205,19 @@ public class TileView : MonoBehaviour
     {
         switch (val)
         {
-            case 2: return new Color32(0, 255, 255, 255);   // Яскравий Блакитний (Cyan)
-            case 4: return new Color32(128, 255, 0, 255);   // Неоновий Зелений
-            case 8: return new Color32(0, 255, 128, 255);   // Весняний Зелений
-            case 16: return new Color32(255, 255, 0, 255);   // Жовтий
-            case 32: return new Color32(255, 150, 0, 255);   // Помаранчевий
-            case 64: return new Color32(255, 100, 0, 255);   // Червоно-помаранчевий
-            case 128: return new Color32(255, 0, 0, 255);       // Червоний
-            case 256: return new Color32(255, 0, 100, 255);   // Малиновий
-            case 512: return new Color32(170, 0, 255, 255);   // Пурпурний
-            case 1024: return new Color32(80, 80, 255, 255);    // Глибокий Синій
-            case 2048: return new Color32(255, 255, 255, 255); // Сяючий Білий
-            default: return new Color32(30, 30, 60, 255);      // Колір за замовчуванням
+            case 2: return new Color32(0, 180, 255, 255);   // світло-блакитний неон
+            case 4: return new Color32(255, 150, 60, 255);  // помаранчевий неон
+            case 8: return new Color32(255, 70, 180, 255);  // рожево-фіолетовий неон
+            case 16: return new Color32(50, 255, 70, 255);  // яскравий малиновий
+            case 32: return new Color32(0, 255, 180, 255);   // м’ятно-зелений неон
+            case 64: return new Color32(255, 94, 0, 255);   // бірюзовий
+            case 128: return new Color32(255, 200, 50, 255);  // жовтий неон
+            case 256: return new Color32(255, 100, 255, 255); // пурпуровий
+            case 512: return new Color32(150, 100, 255, 255); // ліловий
+            case 1024: return new Color32(80, 160, 255, 255);  // синій неон
+            case 2048: return new Color32(255, 255, 255, 255); // білий — фінальна плитка
+            default: return new Color32(255, 255, 255, 255);    // темно-синій фон
         }
     }
+
 }

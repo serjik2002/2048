@@ -7,6 +7,7 @@ public class InputHandler : MonoBehaviour
 
     [Header("Swipe Settings")]
     [SerializeField] private float minSwipeDistance = 50f; // Мінімальна довжина свайпу в пікселях
+    public bool Active { get; set; } = true;
 
     private Vector2 startTouchPos;
     private Vector2 endTouchPos;
@@ -14,6 +15,7 @@ public class InputHandler : MonoBehaviour
 
     void Update()
     {
+        if (!Active) return;
         // Загальна клавіатура (завжди доступна у збірках, де є клавіатура)
         HandleKeyboardInput();
 
