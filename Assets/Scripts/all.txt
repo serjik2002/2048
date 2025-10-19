@@ -7,20 +7,20 @@ public class GameBoardView : MonoBehaviour
 {
     [Header("Model + Prefabs")]
     public GamePlayModel model;
-    public GameObject backgroundTilePrefab; // Пустая подложка
-    public GameObject valueTilePrefab;      // Плитка со значением
+    public GameObject backgroundTilePrefab;
+    public GameObject valueTilePrefab;
 
     [Header("UI Links")]
     public RectTransform boardContainer;
     public TextMeshProUGUI scoreText;
-    public TextMeshProUGUI messageText;
+    public TextMeshProUGUI bestScore;
 
     [Header("Board Settings")]
     [SerializeField] private float tileSize = 100f;
     [SerializeField] private float spacing = 10f;
 
-    private GameObject[,] backgroundTiles; // Статичные подложки
-    private TileView[,] valueTiles;        // Плитки со значениями
+    private GameObject[,] backgroundTiles;
+    private TileView[,] valueTiles;
     private bool isAnimating = false;
 
     void Start()
@@ -38,52 +38,43 @@ public class GameBoardView : MonoBehaviour
         float startX = -boardSize / 2f + tileSize / 2f;
         float startY = boardSize / 2f - tileSize / 2f;
 
-        // Создаём фоновые подложки
         for (int r = 0; r < model.Size; r++)
         {
             for (int c = 0; c < model.Size; c++)
             {
                 GameObject bgTile = Instantiate(backgroundTilePrefab, boardContainer);
                 RectTransform rect = bgTile.GetComponent<RectTransform>();
-
                 rect.anchorMin = new Vector2(0.5f, 0.5f);
                 rect.anchorMax = new Vector2(0.5f, 0.5f);
                 rect.pivot = new Vector2(0.5f, 0.5f);
                 rect.sizeDelta = new Vector2(tileSize, tileSize);
-
                 float x = startX + c * (tileSize + spacing);
                 float y = startY - r * (tileSize + spacing);
                 rect.anchoredPosition = new Vector2(x, y);
-
                 backgroundTiles[r, c] = bgTile;
             }
         }
 
-        // Создаём плитки со значениями (изначально все скрыты)
         for (int r = 0; r < model.Size; r++)
         {
             for (int c = 0; c < model.Size; c++)
             {
                 GameObject valueTile = Instantiate(valueTilePrefab, boardContainer);
                 RectTransform rect = valueTile.GetComponent<RectTransform>();
-
                 rect.anchorMin = new Vector2(0.5f, 0.5f);
                 rect.anchorMax = new Vector2(0.5f, 0.5f);
                 rect.pivot = new Vector2(0.5f, 0.5f);
                 rect.sizeDelta = new Vector2(tileSize, tileSize);
-
                 float x = startX + c * (tileSize + spacing);
                 float y = startY - r * (tileSize + spacing);
                 rect.anchoredPosition = new Vector2(x, y);
-
                 TileView tv = valueTile.GetComponent<TileView>();
-                tv.SetValue(0); // Скрываем
+                tv.SetValue(0);
                 valueTiles[r, c] = tv;
             }
         }
     }
 
-    // Получить позицию ячейки [r, c]
     private Vector2 GetCellPosition(int r, int c)
     {
         return backgroundTiles[r, c].GetComponent<RectTransform>().anchoredPosition;
@@ -110,16 +101,14 @@ public class GameBoardView : MonoBehaviour
 
     private void RefreshImmediate()
     {
-        // Обновляем все плитки согласно модели БЕЗ анимации
         for (int r = 0; r < model.Size; r++)
         {
             for (int c = 0; c < model.Size; c++)
             {
-                valueTiles[r, c].SetValue(model.Board[r, c], false); // false - без анимации
+                valueTiles[r, c].SetValue(model.Board[r, c], true);
                 valueTiles[r, c].GetComponent<RectTransform>().anchoredPosition = GetCellPosition(r, c);
             }
         }
-
         UpdateUI();
     }
 
@@ -127,7 +116,6 @@ public class GameBoardView : MonoBehaviour
     {
         isAnimating = true;
 
-        // Сначала скрываем все плитки, которые будут двигаться
         foreach (var move in model.LastMoves)
         {
             if (move.from != move.to)
@@ -139,86 +127,74 @@ public class GameBoardView : MonoBehaviour
         int completedMoves = 0;
         int totalMoves = model.LastMoves.Count;
 
-        // Запускаем все анимации параллельно
         foreach (var move in model.LastMoves)
         {
             Vector2 fromPos = GetCellPosition(move.from.x, move.from.y);
             Vector2 toPos = GetCellPosition(move.to.x, move.to.y);
-
             TileView movingTile = valueTiles[move.from.x, move.from.y];
 
-            // Устанавливаем начальную позицию и значение
             movingTile.GetComponent<RectTransform>().anchoredPosition = fromPos;
+            movingTile.SetValue(move.value, false);
 
-            if (move.isMerge)
-            {
-                movingTile.SetValue(move.value, false); // Показываем исходное значение
-            }
-            else
-            {
-                movingTile.SetValue(move.value, true); // Показываем финальное значение
-            }
-
-            // Анимируем движение
-            StartCoroutine(AnimateSingleMove(movingTile, fromPos, toPos, move, () =>
+            StartCoroutine(AnimateSingleMove(movingTile, fromPos, toPos, () =>
             {
                 completedMoves++;
             }));
         }
 
-        // Ждём завершения всех анимаций
         while (completedMoves < totalMoves)
         {
             yield return null;
         }
 
-        // Синхронизируем финальное состояние БЕЗ анимации для всех плиток
+        foreach (var move in model.LastMoves)
+        {
+            if (move.isMerge)
+            {
+                valueTiles[move.from.x, move.from.y].SetValue(0, false);
+                TileView destinationTile = valueTiles[move.to.x, move.to.y];
+                destinationTile.SetValue(move.mergedValue, false);
+                destinationTile.AnimateScalePop();
+            }
+        }
+
         for (int r = 0; r < model.Size; r++)
         {
             for (int c = 0; c < model.Size; c++)
             {
-                valueTiles[r, c].SetValue(model.Board[r, c], false); // false - без анимации
+                valueTiles[r, c].SetValue(model.Board[r, c], false);
                 valueTiles[r, c].GetComponent<RectTransform>().anchoredPosition = GetCellPosition(r, c);
             }
         }
 
         yield return new WaitForSeconds(0.05f);
 
-        // Анимируем появление только НОВОЙ плитки
         if (model.NewTilePosition.HasValue)
         {
             Vector2Int newPos = model.NewTilePosition.Value;
-            valueTiles[newPos.x, newPos.y].SetValue(model.Board[newPos.x, newPos.y], true); // true - с анимацией
-            valueTiles[newPos.x, newPos.y].AnimateSpawn();
+            int newValue = model.Board[newPos.x, newPos.y];
+            valueTiles[newPos.x, newPos.y].AnimateSpawn(newValue);
         }
+
+        //for (int r = 0; r < model.Size; r++)
+        //    for (int c = 0; c < model.Size; c++)
+        //        if (model.Board[r, c] == 0)
+        //            valueTiles[r, c].SetValue(0, false);
 
         UpdateUI();
         isAnimating = false;
     }
 
-    private IEnumerator AnimateSingleMove(TileView tile, Vector2 fromPos, Vector2 toPos, GamePlayModel.TileMove move, System.Action onComplete)
+    private IEnumerator AnimateSingleMove(TileView tile, Vector2 fromPos, Vector2 toPos, System.Action onComplete)
     {
-        // Анимация движения
         yield return StartCoroutine(tile.AnimateMoveCoroutine(fromPos, toPos));
-
-        // Если это слияние - анимируем scale pop
-        if (move.isMerge)
-        {
-            // Обновляем значение на целевой плитке
-            valueTiles[move.to.x, move.to.y].SetValue(move.mergedValue, false); // Без анимации fade
-            valueTiles[move.to.x, move.to.y].AnimateScalePop();
-
-            // Скрываем движущуюся плитку
-            tile.SetValue(0, false);
-        }
-
         onComplete?.Invoke();
     }
 
     private void UpdateUI()
     {
         scoreText.text = model.Score.ToString();
-        messageText.text = model.IsGameOver ? "Game Over!" : "";
+        bestScore.text = model.MaxScore.ToString();
     }
 }
 using UnityEngine;
@@ -226,6 +202,7 @@ using UnityEngine;
 public class GameController : MonoBehaviour
 {
     [SerializeField] private GameBoardView view;
+    [SerializeField] private InputHandler _inputHandler;
 
     private GamePlayModel model;
 
@@ -236,15 +213,12 @@ public class GameController : MonoBehaviour
 
     private void Start()
     {
+        _inputHandler.OnMoveInput += MakeMove;
         view.model = model;
     }
 
     void Update()
     {
-        if (Input.GetKeyDown(KeyCode.LeftArrow)) MakeMove(Vector2Int.left);
-        if (Input.GetKeyDown(KeyCode.RightArrow)) MakeMove(Vector2Int.right);
-        if (Input.GetKeyDown(KeyCode.UpArrow)) MakeMove(Vector2Int.up);
-        if (Input.GetKeyDown(KeyCode.DownArrow)) MakeMove(Vector2Int.down);
 
         // Отладочная перезагрузка
         if (Input.GetKeyDown(KeyCode.R))
@@ -268,39 +242,51 @@ public class GameController : MonoBehaviour
         model.Reset();
         view.Refresh();
     }
+
+    public void Reload()
+    {
+        model.Reset();
+        view.Refresh();
+    }
 }
 using System;
 using System.Collections.Generic;
 using System.Linq;
 using UnityEngine;
 
+[Serializable]
 public class GamePlayModel
 {
     public int Size { get; private set; } = 4;
     public int[,] Board { get; private set; }
     public int Score { get; private set; }
+    public int MaxScore { get; private set; }
     public bool IsGameOver { get; private set; }
 
-    // Для анимации
     public class TileMove
     {
         public Vector2Int from;
         public Vector2Int to;
         public int value;
         public bool isMerge;
-        public int mergedValue; // значение после слияния
+        public int mergedValue;
     }
-    public Vector2Int? NewTilePosition { get; private set; } = null; // Позиция новой плитки
 
+    public Vector2Int? NewTilePosition { get; private set; } = null;
     public List<TileMove> LastMoves { get; private set; } = new List<TileMove>();
-
     private System.Random rng = new System.Random();
+
+    private const string SAVE_KEY = "GameSaveData";
 
     public GamePlayModel(int size = 4)
     {
         Size = size;
         Board = new int[size, size];
-        Reset();
+        Load(); // 👈 спробуємо завантажити існуючу сесію
+        if (IsEmpty())
+        {
+            Reset();
+        }
     }
 
     public void Reset()
@@ -312,6 +298,7 @@ public class GamePlayModel
         NewTilePosition = null;
         SpawnTile();
         SpawnTile();
+        Save();
     }
 
     public bool Move(Vector2Int dir)
@@ -323,7 +310,6 @@ public class GamePlayModel
         bool moved = false;
         bool[,] merged = new bool[Size, Size];
 
-        // Определяем порядок обхода в зависимости от направления
         int startRow = dir.y > 0 ? Size - 1 : 0;
         int endRow = dir.y > 0 ? -1 : Size;
         int stepRow = dir.y > 0 ? -1 : 1;
@@ -332,7 +318,6 @@ public class GamePlayModel
         int endCol = dir.x > 0 ? -1 : Size;
         int stepCol = dir.x > 0 ? -1 : 1;
 
-        // Временный список для отслеживания движений
         List<TileMove> tempMoves = new List<TileMove>();
 
         for (int r = startRow; r != endRow; r += stepRow)
@@ -348,17 +333,14 @@ public class GamePlayModel
                 bool movedThisTile = false;
                 Vector2Int finalPos = startPos;
 
-                // Двигаем плитку пока возможно
                 while (true)
                 {
-                    int nextR = currentR - dir.y;
+                    int nextR = currentR + dir.y;
                     int nextC = currentC + dir.x;
 
-                    // Проверяем границы
                     if (nextR < 0 || nextR >= Size || nextC < 0 || nextC >= Size)
                         break;
 
-                    // Если следующая ячейка пустая - перемещаемся
                     if (Board[nextR, nextC] == 0)
                     {
                         Board[nextR, nextC] = Board[currentR, currentC];
@@ -369,13 +351,13 @@ public class GamePlayModel
                         movedThisTile = true;
                         moved = true;
                     }
-                    // Если следующая ячейка содержит такую же плитку и не была объединена - объединяем
                     else if (Board[nextR, nextC] == Board[currentR, currentC] && !merged[nextR, nextC])
                     {
                         int newValue = Board[nextR, nextC] * 2;
                         Board[nextR, nextC] = newValue;
                         Board[currentR, currentC] = 0;
                         Score += newValue;
+                        if (Score > MaxScore) MaxScore = Score; // 🔥 оновлюємо maxScore
                         merged[nextR, nextC] = true;
                         movedThisTile = true;
                         moved = true;
@@ -390,17 +372,11 @@ public class GamePlayModel
                         });
                         break;
                     }
-                    else
-                    {
-                        // Не можем двигаться дальше
-                        break;
-                    }
+                    else break;
                 }
 
-                // Если плитка двигалась но не объединялась
                 if (movedThisTile && finalPos != startPos)
                 {
-                    // Проверяем, не было ли уже добавлено движение слияния для этой плитки
                     bool alreadyAddedAsMerge = tempMoves.Any(m => m.from == startPos && m.isMerge);
 
                     if (!alreadyAddedAsMerge)
@@ -417,14 +393,15 @@ public class GamePlayModel
             }
         }
 
-        // Переносим временные движения в основной список
         LastMoves.AddRange(tempMoves);
 
         if (moved)
         {
             SpawnTile();
             if (CheckGameOver()) IsGameOver = true;
+            Save();
         }
+
         return moved;
     }
 
@@ -440,7 +417,7 @@ public class GamePlayModel
 
         Vector2Int pick = empties[rng.Next(empties.Count)];
         Board[pick.x, pick.y] = rng.NextDouble() < 0.9 ? 2 : 4;
-        NewTilePosition = pick; // Запоминаем позицию новой плитки!
+        NewTilePosition = pick;
     }
 
     private bool CheckGameOver()
@@ -457,16 +434,76 @@ public class GamePlayModel
         return true;
     }
 
-    public void PrintDebug()
+    private bool IsEmpty()
     {
-        string s = "";
-        for (int r = 0; r < Size; r++)
+        foreach (int v in Board)
+            if (v != 0)
+                return false;
+        return true;
+    }
+
+    [Serializable]
+    private class SaveData
+    {
+        public int size;
+        public int[] flatBoard;
+        public int score;
+        public int maxScore;
+        public bool gameOver;
+    }
+
+    public void Save()
+    {
+        SaveData data = new SaveData
         {
+            size = Size,
+            flatBoard = Flatten(Board),
+            score = Score,
+            maxScore = MaxScore,
+            gameOver = IsGameOver
+        };
+
+        string json = JsonUtility.ToJson(data);
+        PlayerPrefs.SetString(SAVE_KEY, json);
+        PlayerPrefs.Save();
+    }
+
+    public void Load()
+    {
+        if (!PlayerPrefs.HasKey(SAVE_KEY)) return;
+
+        string json = PlayerPrefs.GetString(SAVE_KEY);
+        SaveData data = JsonUtility.FromJson<SaveData>(json);
+        if (data == null) return;
+
+        Size = data.size;
+        Board = Unflatten(data.flatBoard, Size);
+        Score = data.score;
+        MaxScore = data.maxScore;
+        IsGameOver = data.gameOver;
+    }
+
+    public void ClearSave()
+    {
+        PlayerPrefs.DeleteKey(SAVE_KEY);
+    }
+
+    private int[] Flatten(int[,] board)
+    {
+        int[] flat = new int[Size * Size];
+        int i = 0;
+        for (int r = 0; r < Size; r++)
             for (int c = 0; c < Size; c++)
-                s += Board[r, c].ToString().PadLeft(5);
-            s += "\n";
-        }
-        Debug.Log(s + $"Score: {Score}");
+                flat[i++] = board[r, c];
+        return flat;
+    }
+
+    private int[,] Unflatten(int[] flat, int size)
+    {
+        int[,] grid = new int[size, size];
+        for (int i = 0; i < flat.Length; i++)
+            grid[i / size, i % size] = flat[i];
+        return grid;
     }
 }
 using TMPro;
@@ -499,12 +536,12 @@ public class TileView : MonoBehaviour
             // Плитка пустая - делаем невидимой через прозрачность
             valueText.text = "";
             background.color = new Color32(0, 0, 0, 0);
+            valueText.color = new Color32(0, 0, 0, 0);
             // Не отключаем GameObject чтобы не прерывать анимации
         }
         else
         {
             valueText.text = value.ToString();
-
             // ВАЖНО: Всегда устанавливаем правильный цвет текста и фона
             Color32 tileColor = GetColor(value);
             valueText.color = GetColor(value);
@@ -573,50 +610,45 @@ public class TileView : MonoBehaviour
     }
 
     // Анимация появления новой плитки
-    public void AnimateSpawn()
+    // Тепер цей метод приймає значення нової плитки
+    public void AnimateSpawn(int newValue)
     {
         if (currentAnimation != null)
             StopCoroutine(currentAnimation);
-
-        currentAnimation = StartCoroutine(SpawnCoroutine());
+        currentAnimation = StartCoroutine(SpawnCoroutine(newValue));
     }
 
-    private IEnumerator SpawnCoroutine()
+    // Корутина також приймає значення
+    private IEnumerator SpawnCoroutine(int newValue)
     {
-        transform.localScale = Vector3.zero;
+        // Спочатку встановлюємо значення та масштаб 0
+        value = newValue;
 
-        // Убедимся, что цвет установлен правильно перед анимацией
+        // Тепер налаштовуємо вигляд (колір, текст).
+        // Плитка ще невидима, бо її масштаб 0.
         if (value != 0)
         {
+            transform.localScale = Vector3.zero;
+            valueText.text = value.ToString();
             Color32 tileColor = GetColor(value);
             background.color = tileColor;
             valueText.color = GetColor(value);
         }
+        else
+        {
+            valueText.text = "";
+            background.color = new Color32(0, 0, 0, 0);
+        }
 
+        // Запускаємо анімацію масштабування від 0 до 1
         float elapsed = 0f;
-
         while (elapsed < scaleAnimDuration)
         {
             elapsed += Time.deltaTime;
             float t = elapsed / scaleAnimDuration;
-
-            // Ease-out с небольшим overshoot
             t = 1f - Mathf.Pow(1f - t, 2f);
-            float scale = Mathf.Lerp(0f, 1.1f, t);
 
-            transform.localScale = Vector3.one * scale;
-            yield return null;
-        }
-
-        // Небольшой bounce назад
-        elapsed = 0f;
-        float bounceTime = 0.05f;
-
-        while (elapsed < bounceTime)
-        {
-            elapsed += Time.deltaTime;
-            float t = elapsed / bounceTime;
-            float scale = Mathf.Lerp(1.1f, 1f, t);
+            float scale = Mathf.Lerp(0f, 1f, t);
             transform.localScale = Vector3.one * scale;
             yield return null;
         }
@@ -693,6 +725,126 @@ public class TileView : MonoBehaviour
             case 1024: return new Color32(80, 160, 255, 255);
             case 2048: return new Color32(255, 255, 255, 255);
             default: return new Color32(30, 30, 60, 255);
+        }
+    }
+}
+using UnityEngine;
+
+public class FpsUnlocker : MonoBehaviour
+{
+    private void Awake()
+    {
+        Application.targetFrameRate = 120;
+        Time.timeScale = 0.1f;
+    }
+}
+using UnityEngine;
+using System;
+
+public class InputHandler : MonoBehaviour
+{
+    public event Action<Vector2Int> OnMoveInput; // Викликається при свайпі або натисканні клавіші
+
+    [Header("Swipe Settings")]
+    [SerializeField] private float minSwipeDistance = 50f; // Мінімальна довжина свайпу в пікселях
+
+    private Vector2 startTouchPos;
+    private Vector2 endTouchPos;
+    private bool isSwiping = false;
+
+    void Update()
+    {
+        // Загальна клавіатура (завжди доступна у збірках, де є клавіатура)
+        HandleKeyboardInput();
+
+        // Платформо-специфічні обробники:
+#if UNITY_ANDROID || UNITY_IOS
+        HandleTouchInput();
+#endif
+
+#if UNITY_STANDALONE || UNITY_EDITOR || UNITY_WEBGL
+        HandleMouseInput();
+#endif
+    }
+
+    // --- 1️⃣ Клавіатура (завжди) ---
+    private void HandleKeyboardInput()
+    {
+        // Якщо потрібно перевести up/down як у твоєму проекті — роби заміну тут.
+        if (Input.GetKeyDown(KeyCode.LeftArrow)) OnMoveInput?.Invoke(Vector2Int.left);
+        if (Input.GetKeyDown(KeyCode.RightArrow)) OnMoveInput?.Invoke(Vector2Int.right);
+        if (Input.GetKeyDown(KeyCode.UpArrow)) OnMoveInput?.Invoke(Vector2Int.down);
+        if (Input.GetKeyDown(KeyCode.DownArrow)) OnMoveInput?.Invoke(Vector2Int.up);
+    }
+
+#if UNITY_ANDROID || UNITY_IOS
+    // --- 2️⃣ Сенсор (тільки мобільні збірки) ---
+    private void HandleTouchInput()
+    {
+        if (Input.touchCount == 0) return;
+
+        Touch touch = Input.GetTouch(0);
+
+        switch (touch.phase)
+        {
+            case TouchPhase.Began:
+                startTouchPos = touch.position;
+                isSwiping = true;
+                break;
+
+            case TouchPhase.Ended:
+            case TouchPhase.Canceled:
+                if (!isSwiping) return;
+                endTouchPos = touch.position;
+                DetectSwipeDirection(endTouchPos - startTouchPos);
+                isSwiping = false;
+                break;
+        }
+    }
+#endif
+
+#if UNITY_STANDALONE || UNITY_EDITOR || UNITY_WEBGL
+    // --- 3️⃣ Миша (для редактора / ПК / WebGL) ---
+    private void HandleMouseInput()
+    {
+        if (Input.GetMouseButtonDown(0))
+        {
+            startTouchPos = Input.mousePosition;
+            isSwiping = true;
+        }
+
+        if (Input.GetMouseButtonUp(0) && isSwiping)
+        {
+            endTouchPos = Input.mousePosition;
+            DetectSwipeDirection(endTouchPos - startTouchPos);
+            isSwiping = false;
+        }
+    }
+#endif
+
+    // --- Основна логіка розпізнавання свайпу ---
+    private void DetectSwipeDirection(Vector2 delta)
+    {
+        if (delta.magnitude < minSwipeDistance)
+            return; // надто короткий свайп
+
+        delta.Normalize();
+
+        if (Mathf.Abs(delta.x) > Mathf.Abs(delta.y))
+        {
+            // Горизонтальний свайп
+            if (delta.x > 0)
+                OnMoveInput?.Invoke(Vector2Int.right);
+            else
+                OnMoveInput?.Invoke(Vector2Int.left);
+        }
+        else
+        {
+            // Вертикальний свайп
+            if (delta.y > 0)
+                OnMoveInput?.Invoke(Vector2Int.down);
+            else
+                OnMoveInput?.Invoke(Vector2Int.up);
         }
     }
 }

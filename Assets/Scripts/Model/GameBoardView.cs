@@ -14,6 +14,7 @@ public class GameBoardView : MonoBehaviour
     public RectTransform boardContainer;
     public TextMeshProUGUI scoreText;
     public TextMeshProUGUI bestScore;
+    public TextMeshProUGUI GameOverText;
 
     [Header("Board Settings")]
     [SerializeField] private float tileSize = 100f;
@@ -85,6 +86,7 @@ public class GameBoardView : MonoBehaviour
     public void Refresh()
     {
         RefreshWithAnimation(false);
+        GameOverText.gameObject.SetActive(false);
     }
 
     public void RefreshWithAnimation(bool animate = true)
@@ -211,5 +213,10 @@ public class GameBoardView : MonoBehaviour
     {
         scoreText.text = model.Score.ToString();
         bestScore.text = model.MaxScore.ToString();
+    }
+
+    public void GameOver()
+    {
+        GameOverText.gameObject.SetActive(true);
     }
 }

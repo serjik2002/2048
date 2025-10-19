@@ -15,7 +15,11 @@ public class InputHandler : MonoBehaviour
 
     void Update()
     {
-        if (!Active) return;
+        if (!Active)
+        {
+            isSwiping = false; 
+            return;
+        }
         // Загальна клавіатура (завжди доступна у збірках, де є клавіатура)
         HandleKeyboardInput();
 

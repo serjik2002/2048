@@ -809,7 +809,7 @@ GameObject:
   - component: {fileID: 550182305}
   - component: {fileID: 550182304}
   m_Layer: 5
-  m_Name: Text (TMP)
+  m_Name: GameOverText
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -863,8 +863,8 @@ MonoBehaviour:
   m_fontMaterials: []
   m_fontColor32:
     serializedVersion: 2
-    rgba: 4278195967
-  m_fontColor: {r: 1, g: 0.08466068, b: 0, a: 1}
+    rgba: 4294936832
+  m_fontColor: {r: 0, g: 0.5372549, b: 1, a: 1}
   m_enableVertexGradient: 0
   m_colorMode: 3
   m_fontColorGradient:
@@ -881,8 +881,8 @@ MonoBehaviour:
   m_faceColor:
     serializedVersion: 2
     rgba: 4294967295
-  m_fontSize: 64
-  m_fontSizeBase: 64
+  m_fontSize: 84
+  m_fontSizeBase: 84
   m_fontWeight: 400
   m_enableAutoSizing: 0
   m_fontSizeMin: 18
@@ -1231,6 +1231,7 @@ MonoBehaviour:
   boardContainer: {fileID: 782067877}
   scoreText: {fileID: 1066746830}
   bestScore: {fileID: 71913416}
+  GameOverText: {fileID: 550182304}
   tileSize: 225
   spacing: 10
 --- !u!4 &812280761

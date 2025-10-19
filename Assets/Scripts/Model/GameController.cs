@@ -15,6 +15,7 @@ public class GameController : MonoBehaviour
     private void Start()
     {
         _inputHandler.OnMoveInput += MakeMove;
+        model.GameOver += view.GameOver;
         view.model = model;
     }
 
@@ -27,6 +28,8 @@ public class GameController : MonoBehaviour
             OnRestartButton();
         }
     }
+
+
 
     private void MakeMove(Vector2Int dir)
     {

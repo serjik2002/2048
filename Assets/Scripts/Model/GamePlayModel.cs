@@ -12,6 +12,8 @@ public class GamePlayModel
     public int MaxScore { get; private set; }
     public bool IsGameOver { get; private set; }
 
+    public event Action GameOver;
+
     public class TileMove
     {
         public Vector2Int from;
@@ -180,6 +182,7 @@ public class GamePlayModel
                 if (c + 1 < Size && Board[r, c] == Board[r, c + 1]) return false;
             }
         }
+        GameOver?.Invoke();
         return true;
     }
 
