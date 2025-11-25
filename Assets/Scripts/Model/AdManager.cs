@@ -229,10 +229,5 @@ public class AdManager : MonoBehaviour
         }
     }
 
-    public void ShowRewardedAd()
-    {
-        ShowRewardedAd(onRewardEarned: null);
-    }
-
     #endregion
 }

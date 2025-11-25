@@ -3,9 +3,13 @@ using UnityEngine;
 public class GameController : MonoBehaviour
 {
     [SerializeField] private GameBoardView view;
+    [SerializeField] private RewardedController _rewardedPanel;
     [SerializeField] private InputHandler _inputHandler;
 
     private GamePlayModel model;
+
+
+    [SerializeField] private int _rewardUndoValue = 3;
 
     void Awake()
     {
@@ -16,6 +20,8 @@ public class GameController : MonoBehaviour
     {
         _inputHandler.OnMoveInput += MakeMove;
         model.GameOver += view.GameOver;
+        model.IsUndo += view.Refresh;
+        model.UndoCountChanged += () => view.ChangeUndoCounter(model.UndoCount);
         view.model = model;
     }
 
@@ -56,5 +62,25 @@ public class GameController : MonoBehaviour
     {
         model.Reset();
         view.Refresh();
+        view.ChangeUndoCounter(model.UndoCount);
+    }
+
+
+
+    public void Undo()
+    {
+        if (model.IsCanUndo || model.UndoCount > 0)
+        {
+            model.Undo();
+        }
+        else
+        {
+            _rewardedPanel.ToggleRewardedPanel();
+        }
+    }
+
+    public void RestoreUndo()
+    {
+        model.RestoreUndo(_rewardUndoValue);
     }
 }

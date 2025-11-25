@@ -20,6 +20,8 @@ public class GameBoardView : MonoBehaviour
     [SerializeField] private float tileSize = 100f;
     [SerializeField] private float spacing = 10f;
 
+    [SerializeField] private TextMeshProUGUI _undoCounter;
+
     private GameObject[,] backgroundTiles;
     private TileView[,] valueTiles;
     private bool isAnimating = false;
@@ -161,7 +163,7 @@ public class GameBoardView : MonoBehaviour
             }
         }
 
-        // 👇 --- НАЧАЛО ИЗМЕНЕНИЙ --- 👇
+      
 
         // Запоминаем позицию новой плитки
         Vector2Int? newTilePos = model.NewTilePosition;
@@ -197,7 +199,6 @@ public class GameBoardView : MonoBehaviour
             valueTiles[pos.x, pos.y].AnimateSpawn(newValue);
         }
 
-        // 👆 --- КОНЕЦ ИЗМЕНЕНИЙ --- 👆
 
         UpdateUI();
         isAnimating = false;
@@ -218,5 +219,10 @@ public class GameBoardView : MonoBehaviour
     public void GameOver()
     {
         GameOverText.gameObject.SetActive(true);
+    }
+
+    public void ChangeUndoCounter(int value)
+    { 
+        _undoCounter.text = value.ToString();
     }
 }

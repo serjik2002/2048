@@ -11,8 +11,18 @@ public class GamePlayModel
     public int Score { get; private set; }
     public int MaxScore { get; private set; }
     public bool IsGameOver { get; private set; }
+    public int UndoCount => _undosCount;
+    public bool IsCanUndo => _isCanUndo;
+
+    private int[,] _previousBoard;
+    private int _previousScore;
+    private int _previousMaxScore;
+    private int _undosCount;
+    private bool _isCanUndo;
 
     public event Action GameOver;
+    public event Action IsUndo;
+    public event Action UndoCountChanged;
 
     public class TileMove
     {
@@ -33,7 +43,8 @@ public class GamePlayModel
     {
         Size = size;
         Board = new int[size, size];
-        Load(); // 👈 спробуємо завантажити існуючу сесію
+        _previousBoard = new int[size, size];
+        Load(); 
         if (IsEmpty())
         {
             Reset();
@@ -44,7 +55,9 @@ public class GamePlayModel
     {
         Score = 0;
         IsGameOver = false;
+        _isCanUndo = false;
         Array.Clear(Board, 0, Board.Length);
+        Array.Clear(_previousBoard, 0, Board.Length);
         LastMoves.Clear();
         NewTilePosition = null;
         SpawnTile();
@@ -55,6 +68,7 @@ public class GamePlayModel
     public bool Move(Vector2Int dir)
     {
         if (IsGameOver) return false;
+        Snapshot();
         LastMoves.Clear();
         NewTilePosition = null;
 
@@ -108,7 +122,7 @@ public class GamePlayModel
                         Board[nextR, nextC] = newValue;
                         Board[currentR, currentC] = 0;
                         Score += newValue;
-                        if (Score > MaxScore) MaxScore = Score; // 🔥 оновлюємо maxScore
+                        if (Score > MaxScore) MaxScore = Score; 
                         merged[nextR, nextC] = true;
                         movedThisTile = true;
                         moved = true;
@@ -150,10 +164,45 @@ public class GamePlayModel
         {
             SpawnTile();
             if (CheckGameOver()) IsGameOver = true;
+            _isCanUndo = true;
             Save();
         }
 
         return moved;
+    }
+
+    private void Snapshot()
+    {
+        _previousScore = Score;
+        _previousMaxScore = MaxScore;
+        for (int i = 0; i < Size; i++)
+        {
+            for (int j = 0; j < Size; j++)
+            {
+                _previousBoard[i, j] = Board[i, j];
+            }
+        }
+    }
+
+    public void Undo()
+    {
+        _undosCount--;
+        Score = _previousScore;
+        MaxScore = _previousMaxScore;
+        IsGameOver = false; // Если мы проиграли, откат должен это отменить
+        _isCanUndo = false;
+        // Восстанавливаем поле
+        for (int i = 0; i < Size; i++)
+        {
+            for (int j = 0; j < Size; j++)
+            {
+                Board[i, j] = _previousBoard[i, j];
+            }
+        }
+        Save();
+        IsUndo?.Invoke();
+        UndoCountChanged?.Invoke();
+
     }
 
     private void SpawnTile()
@@ -170,6 +219,14 @@ public class GamePlayModel
         Board[pick.x, pick.y] = rng.NextDouble() < 0.9 ? 2 : 4;
         NewTilePosition = pick;
     }
+
+    public void RestoreUndo(int value)
+    {
+        _undosCount = value;
+        UndoCountChanged?.Invoke();
+    }
+
+
 
     private bool CheckGameOver()
     {
