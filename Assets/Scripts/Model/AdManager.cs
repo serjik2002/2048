@@ -10,12 +10,16 @@ public class AdManager : MonoBehaviour
 
     // --- Interstitial Ad ---
     private InterstitialAd _interstitialAd;
-    private const string InterstitialAdUnitId = "ca-app-pub-8968740975401720/1778481179"; // тестовый
+    private const string InterstitialAdUnitId = "ca-app-pub-8968740975401720/1778481179"; // Ваш ID (тестовый)
 
-    // --- ДОБАВЛЕНО ДЛЯ БАННЕРА ---
+    // --- Banner Ad ---
     private BannerView _bannerView;
-    private const string BannerAdUnitId = "ca-app-pub-8968740975401720/9649749253";
+    private const string BannerAdUnitId = "ca-app-pub-8968740975401720/9649749253"; // Ваш ID
 
+    // --- ДОБАВЛЕНО: Rewarded Ad (Реклама с вознаграждением) ---
+    private RewardedAd _rewardedAd;
+    // Это тестовый ID от Google для Rewarded Video. ЗАМЕНИТЕ НА СВОЙ перед релизом!
+    private const string RewardedAdUnitId = "ca-app-pub-8968740975401720/8636037480";
 
     [SerializeField] private float adFreeDurationMinutes = 5f;
     private float adFreeDurationSeconds;
@@ -46,16 +50,31 @@ public class AdManager : MonoBehaviour
     {
         InitializeAds();
         LoadInterstitialAd();
-        LoadBannerAd(); // --- ДОБАВЛЕНО ДЛЯ БАННЕРА ---
+        LoadBannerAd();
+        LoadRewardedAd(); // --- Загружаем рекламу с вознаграждением ---
     }
 
-    // --- ДОБАВЛЕНО ДЛЯ БАННЕРА ---
-    // Важно очищать ресурсы, когда объект уничтожается
     private void OnDestroy()
     {
+        // Очистка Баннера
         if (_bannerView != null)
         {
             _bannerView.Destroy();
+            _bannerView = null;
+        }
+
+        // Очистка Interstitial
+        if (_interstitialAd != null)
+        {
+            _interstitialAd.Destroy();
+            _interstitialAd = null;
+        }
+
+        // --- Очистка Rewarded ---
+        if (_rewardedAd != null)
+        {
+            _rewardedAd.Destroy();
+            _rewardedAd = null;
         }
     }
 
@@ -73,19 +92,23 @@ public class AdManager : MonoBehaviour
 
     private void LoadInterstitialAd()
     {
+        if (_interstitialAd != null)
+        {
+            _interstitialAd.Destroy();
+            _interstitialAd = null;
+        }
+
         var request = new AdRequest();
         InterstitialAd.Load(InterstitialAdUnitId, request, (ad, error) =>
         {
             if (error != null || ad == null)
             {
                 Debug.LogError("Ошибка загрузки межстраничной рекламы: " + error);
-                // Повторная попытка загрузки через 10 секунд
-                Invoke(nameof(LoadInterstitialAd), 10f);
+                Invoke(nameof(LoadInterstitialAd), 10f); // Повторная попытка
                 return;
             }
 
             _interstitialAd = ad;
-            // Подписываемся на событие закрытия для автоперезагрузки
             _interstitialAd.OnAdFullScreenContentClosed += () => LoadInterstitialAd();
         });
     }
@@ -94,7 +117,7 @@ public class AdManager : MonoBehaviour
     {
         if (_interstitialAd != null && _interstitialAd.CanShowAd())
         {
-            if(Time.time - startTime >= adFreeDurationSeconds)
+            if (Time.time - startTime >= adFreeDurationSeconds)
                 _interstitialAd.Show();
         }
         else
@@ -105,41 +128,110 @@ public class AdManager : MonoBehaviour
 
     #endregion
 
-    // --- ДОБАВЛЕНО ДЛЯ БАННЕРА ---
     #region Banner Ad Logic
 
     public void LoadBannerAd()
     {
-        // Если баннер уже существует, уничтожаем его, чтобы создать новый
         if (_bannerView != null)
         {
             _bannerView.Destroy();
+            _bannerView = null; // Хорошая практика обнулять ссылку
         }
 
-        // Создаем стандартный баннер (320x50) внизу экрана
         _bannerView = new BannerView(BannerAdUnitId, AdSize.Banner, AdPosition.Bottom);
-
         var request = new AdRequest();
-
-        // Загружаем и показываем баннер
         _bannerView.LoadAd(request);
-        Debug.Log("Загрузка баннера...");
     }
 
     public void HideBannerAd()
     {
-        if (_bannerView != null)
-        {
-            _bannerView.Hide();
-        }
+        if (_bannerView != null) _bannerView.Hide();
     }
 
     public void ShowBannerAd()
     {
-        if (_bannerView != null)
+        if (_bannerView != null) _bannerView.Show();
+    }
+
+    #endregion
+
+    // --- ДОБАВЛЕНО: Логика Rewarded Ad ---
+    #region Rewarded Ad Logic
+
+    public void LoadRewardedAd()
+    {
+        // Очищаем старую рекламу перед загрузкой новой
+        if (_rewardedAd != null)
         {
-            _bannerView.Show();
+            _rewardedAd.Destroy();
+            _rewardedAd = null;
         }
+
+        Debug.Log("Загрузка Rewarded рекламы...");
+
+        var request = new AdRequest();
+
+        RewardedAd.Load(RewardedAdUnitId, request, (ad, error) =>
+        {
+            if (error != null || ad == null)
+            {
+                Debug.LogError("Ошибка загрузки Rewarded рекламы: " + error);
+                // Можно попробовать перезагрузить через время, если нужно, но осторожно с циклами
+                return;
+            }
+
+            Debug.Log("Rewarded реклама загружена!");
+            _rewardedAd = ad;
+
+            // Регистрируем обработчики событий (например, чтобы загрузить новую после закрытия)
+            RegisterReloadHandler(_rewardedAd);
+        });
+    }
+
+    private void RegisterReloadHandler(RewardedAd ad)
+    {
+        // Вызывается, когда реклама закрывается (посмотрели или нет)
+        ad.OnAdFullScreenContentClosed += () =>
+        {
+            Debug.Log("Rewarded реклама закрыта. Загружаем следующую.");
+            LoadRewardedAd();
+        };
+
+        // Вызывается, если показать не удалось
+        ad.OnAdFullScreenContentFailed += (adError) =>
+        {
+            Debug.LogError("Ошибка показа Rewarded рекламы: " + adError);
+            LoadRewardedAd();
+        };
+    }
+
+    /// <summary>
+    /// Метод показа рекламы. Принимает функцию (callback), которая выполнится при успешном просмотре.
+    /// </summary>
+    /// <param name="onRewardEarned">Действие, которое нужно выполнить (дать монеты, жизнь и т.д.)</param>
+    public void ShowRewardedAd(Action<Reward> onRewardEarned)
+    {
+        if (_rewardedAd != null && _rewardedAd.CanShowAd())
+        {
+            _rewardedAd.Show((Reward reward) =>
+            {
+                // Пользователь досмотрел рекламу до конца
+                Debug.Log($"Награда получена! Тип: {reward.Type}, кол-во: {reward.Amount}");
+
+                // Выполняем действие, переданное из другого скрипта
+                onRewardEarned?.Invoke(reward);
+            });
+        }
+        else
+        {
+            Debug.Log("Rewarded реклама еще не готова.");
+            // Опционально: Можно показать сообщение пользователю "Реклама загружается..."
+        }
+    }
+
+    public void ShowRewardedAd()
+    {
+        ShowRewardedAd(onRewardEarned: null);
     }
 
     #endregion
