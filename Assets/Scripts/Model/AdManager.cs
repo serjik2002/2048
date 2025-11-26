@@ -8,20 +8,18 @@ public class AdManager : MonoBehaviour
 
     private bool _isInitialized = false;
 
-    // --- Interstitial Ad ---
+    [Header("Ad Unit IDs")]
+    [SerializeField] private string _interstitialAdId = "ca-app-pub-8968740975401720/1778481179";
+    [SerializeField] private string _bannerAdId = "ca-app-pub-8968740975401720/9649749253";
+    [SerializeField] private string _rewardedAdId = "ca-app-pub-8968740975401720/8636037480";
+
+
     private InterstitialAd _interstitialAd;
-    private const string InterstitialAdUnitId = "ca-app-pub-8968740975401720/1778481179"; // Ваш ID (тестовый)
-
-    // --- Banner Ad ---
     private BannerView _bannerView;
-    private const string BannerAdUnitId = "ca-app-pub-8968740975401720/9649749253"; // Ваш ID
-
-    // --- ДОБАВЛЕНО: Rewarded Ad (Реклама с вознаграждением) ---
     private RewardedAd _rewardedAd;
-    // Это тестовый ID от Google для Rewarded Video. ЗАМЕНИТЕ НА СВОЙ перед релизом!
-    private const string RewardedAdUnitId = "ca-app-pub-8968740975401720/8636037480";
 
-    [SerializeField] private float adFreeDurationMinutes = 5f;
+
+    [SerializeField] private float adFreeDurationMinutes = 3f;
     private float adFreeDurationSeconds;
     private float startTime;
 
@@ -99,7 +97,7 @@ public class AdManager : MonoBehaviour
         }
 
         var request = new AdRequest();
-        InterstitialAd.Load(InterstitialAdUnitId, request, (ad, error) =>
+        InterstitialAd.Load(_interstitialAdId, request, (ad, error) =>
         {
             if (error != null || ad == null)
             {
@@ -138,7 +136,7 @@ public class AdManager : MonoBehaviour
             _bannerView = null; // Хорошая практика обнулять ссылку
         }
 
-        _bannerView = new BannerView(BannerAdUnitId, AdSize.Banner, AdPosition.Bottom);
+        _bannerView = new BannerView(_bannerAdId, AdSize.Banner, AdPosition.Bottom);
         var request = new AdRequest();
         _bannerView.LoadAd(request);
     }
@@ -171,7 +169,7 @@ public class AdManager : MonoBehaviour
 
         var request = new AdRequest();
 
-        RewardedAd.Load(RewardedAdUnitId, request, (ad, error) =>
+        RewardedAd.Load(_rewardedAdId, request, (ad, error) =>
         {
             if (error != null || ad == null)
             {

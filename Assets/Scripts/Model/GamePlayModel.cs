@@ -17,7 +17,7 @@ public class GamePlayModel
     private int[,] _previousBoard;
     private int _previousScore;
     private int _previousMaxScore;
-    private int _undosCount;
+    private int _undosCount = 3;
     private bool _isCanUndo;
 
     public event Action GameOver;
@@ -175,30 +175,21 @@ public class GamePlayModel
     {
         _previousScore = Score;
         _previousMaxScore = MaxScore;
-        for (int i = 0; i < Size; i++)
-        {
-            for (int j = 0; j < Size; j++)
-            {
-                _previousBoard[i, j] = Board[i, j];
-            }
-        }
+
+        Array.Copy(Board, _previousBoard, Board.Length);
     }
 
     public void Undo()
     {
-        _undosCount--;
+        if (_undosCount > 0) 
+            _undosCount--;
+
         Score = _previousScore;
         MaxScore = _previousMaxScore;
         IsGameOver = false; // Если мы проиграли, откат должен это отменить
         _isCanUndo = false;
         // Восстанавливаем поле
-        for (int i = 0; i < Size; i++)
-        {
-            for (int j = 0; j < Size; j++)
-            {
-                Board[i, j] = _previousBoard[i, j];
-            }
-        }
+        Array.Copy(_previousBoard, Board, Board.Length);
         Save();
         IsUndo?.Invoke();
         UndoCountChanged?.Invoke();
@@ -223,6 +214,7 @@ public class GamePlayModel
     public void RestoreUndo(int value)
     {
         _undosCount = value;
+        Save();
         UndoCountChanged?.Invoke();
     }
 
@@ -259,6 +251,7 @@ public class GamePlayModel
         public int score;
         public int maxScore;
         public bool gameOver;
+        public int undoCount;
     }
 
     public void Save()
@@ -269,7 +262,10 @@ public class GamePlayModel
             flatBoard = Flatten(Board),
             score = Score,
             maxScore = MaxScore,
-            gameOver = IsGameOver
+            gameOver = IsGameOver,
+
+            // ДОБАВЛЕНО: Записываем текущее кол-во
+            undoCount = _undosCount
         };
 
         string json = JsonUtility.ToJson(data);
@@ -290,6 +286,8 @@ public class GamePlayModel
         Score = data.score;
         MaxScore = data.maxScore;
         IsGameOver = data.gameOver;
+
+        _undosCount = data.undoCount;
     }
 
     public void ClearSave()

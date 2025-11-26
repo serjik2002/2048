@@ -69,7 +69,9 @@ public class GameController : MonoBehaviour
 
     public void Undo()
     {
-        if (model.IsCanUndo || model.UndoCount > 0)
+        if (!model.IsCanUndo) return;
+
+        if (model.UndoCount > 0)
         {
             model.Undo();
         }

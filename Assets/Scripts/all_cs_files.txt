@@ -1,0 +1,1322 @@
+﻿using UnityEngine;
+using GoogleMobileAds.Api;
+using System;
+
+public class AdManager : MonoBehaviour
+{
+    public static AdManager Instance { get; private set; }
+
+    private bool _isInitialized = false;
+
+    // --- Interstitial Ad ---
+    private InterstitialAd _interstitialAd;
+    private const string InterstitialAdUnitId = "ca-app-pub-8968740975401720/1778481179"; // Ваш ID (тестовый)
+
+    // --- Banner Ad ---
+    private BannerView _bannerView;
+    private const string BannerAdUnitId = "ca-app-pub-8968740975401720/9649749253"; // Ваш ID
+
+    // --- ДОБАВЛЕНО: Rewarded Ad (Реклама с вознаграждением) ---
+    private RewardedAd _rewardedAd;
+    // Это тестовый ID от Google для Rewarded Video. ЗАМЕНИТЕ НА СВОЙ перед релизом!
+    private const string RewardedAdUnitId = "ca-app-pub-8968740975401720/8636037480";
+
+    [SerializeField] private float adFreeDurationMinutes = 5f;
+    private float adFreeDurationSeconds;
+    private float startTime;
+
+    private void Awake()
+    {
+        InititalizeSingleton();
+    }
+
+    private void InititalizeSingleton()
+    {
+        if (Instance == null)
+        {
+            Instance = this;
+            DontDestroyOnLoad(gameObject);
+
+            startTime = Time.time;
+            adFreeDurationSeconds = adFreeDurationMinutes * 60f;
+        }
+        else
+        {
+            Destroy(gameObject);
+        }
+    }
+
+    private void Start()
+    {
+        InitializeAds();
+        LoadInterstitialAd();
+        LoadBannerAd();
+        LoadRewardedAd(); // --- Загружаем рекламу с вознаграждением ---
+    }
+
+    private void OnDestroy()
+    {
+        // Очистка Баннера
+        if (_bannerView != null)
+        {
+            _bannerView.Destroy();
+            _bannerView = null;
+        }
+
+        // Очистка Interstitial
+        if (_interstitialAd != null)
+        {
+            _interstitialAd.Destroy();
+            _interstitialAd = null;
+        }
+
+        // --- Очистка Rewarded ---
+        if (_rewardedAd != null)
+        {
+            _rewardedAd.Destroy();
+            _rewardedAd = null;
+        }
+    }
+
+    private void InitializeAds()
+    {
+        if (_isInitialized) return;
+        MobileAds.Initialize(initStatus =>
+        {
+            Debug.Log("Google Mobile Ads SDK initialized.");
+            _isInitialized = true;
+        });
+    }
+
+    #region Interstitial Ad Logic
+
+    private void LoadInterstitialAd()
+    {
+        if (_interstitialAd != null)
+        {
+            _interstitialAd.Destroy();
+            _interstitialAd = null;
+        }
+
+        var request = new AdRequest();
+        InterstitialAd.Load(InterstitialAdUnitId, request, (ad, error) =>
+        {
+            if (error != null || ad == null)
+            {
+                Debug.LogError("Ошибка загрузки межстраничной рекламы: " + error);
+                Invoke(nameof(LoadInterstitialAd), 10f); // Повторная попытка
+                return;
+            }
+
+            _interstitialAd = ad;
+            _interstitialAd.OnAdFullScreenContentClosed += () => LoadInterstitialAd();
+        });
+    }
+
+    public void ShowInterstitialAd()
+    {
+        if (_interstitialAd != null && _interstitialAd.CanShowAd())
+        {
+            if (Time.time - startTime >= adFreeDurationSeconds)
+                _interstitialAd.Show();
+        }
+        else
+        {
+            Debug.Log("Межстраничная реклама не готова.");
+        }
+    }
+
+    #endregion
+
+    #region Banner Ad Logic
+
+    public void LoadBannerAd()
+    {
+        if (_bannerView != null)
+        {
+            _bannerView.Destroy();
+            _bannerView = null; // Хорошая практика обнулять ссылку
+        }
+
+        _bannerView = new BannerView(BannerAdUnitId, AdSize.Banner, AdPosition.Bottom);
+        var request = new AdRequest();
+        _bannerView.LoadAd(request);
+    }
+
+    public void HideBannerAd()
+    {
+        if (_bannerView != null) _bannerView.Hide();
+    }
+
+    public void ShowBannerAd()
+    {
+        if (_bannerView != null) _bannerView.Show();
+    }
+
+    #endregion
+
+    // --- ДОБАВЛЕНО: Логика Rewarded Ad ---
+    #region Rewarded Ad Logic
+
+    public void LoadRewardedAd()
+    {
+        // Очищаем старую рекламу перед загрузкой новой
+        if (_rewardedAd != null)
+        {
+            _rewardedAd.Destroy();
+            _rewardedAd = null;
+        }
+
+        Debug.Log("Загрузка Rewarded рекламы...");
+
+        var request = new AdRequest();
+
+        RewardedAd.Load(RewardedAdUnitId, request, (ad, error) =>
+        {
+            if (error != null || ad == null)
+            {
+                Debug.LogError("Ошибка загрузки Rewarded рекламы: " + error);
+                // Можно попробовать перезагрузить через время, если нужно, но осторожно с циклами
+                return;
+            }
+
+            Debug.Log("Rewarded реклама загружена!");
+            _rewardedAd = ad;
+
+            // Регистрируем обработчики событий (например, чтобы загрузить новую после закрытия)
+            RegisterReloadHandler(_rewardedAd);
+        });
+    }
+
+    private void RegisterReloadHandler(RewardedAd ad)
+    {
+        // Вызывается, когда реклама закрывается (посмотрели или нет)
+        ad.OnAdFullScreenContentClosed += () =>
+        {
+            Debug.Log("Rewarded реклама закрыта. Загружаем следующую.");
+            LoadRewardedAd();
+        };
+
+        // Вызывается, если показать не удалось
+        ad.OnAdFullScreenContentFailed += (adError) =>
+        {
+            Debug.LogError("Ошибка показа Rewarded рекламы: " + adError);
+            LoadRewardedAd();
+        };
+    }
+
+    /// <summary>
+    /// Метод показа рекламы. Принимает функцию (callback), которая выполнится при успешном просмотре.
+    /// </summary>
+    /// <param name="onRewardEarned">Действие, которое нужно выполнить (дать монеты, жизнь и т.д.)</param>
+    public void ShowRewardedAd(Action<Reward> onRewardEarned)
+    {
+        if (_rewardedAd != null && _rewardedAd.CanShowAd())
+        {
+            _rewardedAd.Show((Reward reward) =>
+            {
+                // Пользователь досмотрел рекламу до конца
+                Debug.Log($"Награда получена! Тип: {reward.Type}, кол-во: {reward.Amount}");
+
+                // Выполняем действие, переданное из другого скрипта
+                onRewardEarned?.Invoke(reward);
+            });
+        }
+        else
+        {
+            Debug.Log("Rewarded реклама еще не готова.");
+            // Опционально: Можно показать сообщение пользователю "Реклама загружается..."
+        }
+    }
+
+    #endregion
+}
+using UnityEngine;
+using TMPro;
+using System.Collections;
+using System.Collections.Generic;
+
+public class GameBoardView : MonoBehaviour
+{
+    [Header("Model + Prefabs")]
+    public GamePlayModel model;
+    public GameObject backgroundTilePrefab;
+    public GameObject valueTilePrefab;
+
+    [Header("UI Links")]
+    public RectTransform boardContainer;
+    public TextMeshProUGUI scoreText;
+    public TextMeshProUGUI bestScore;
+    public TextMeshProUGUI GameOverText;
+
+    [Header("Board Settings")]
+    [SerializeField] private float tileSize = 100f;
+    [SerializeField] private float spacing = 10f;
+
+    [SerializeField] private TextMeshProUGUI _undoCounter;
+
+    private GameObject[,] backgroundTiles;
+    private TileView[,] valueTiles;
+    private bool isAnimating = false;
+
+    public bool IsAnimating => isAnimating;
+
+    void Start()
+    {
+        InitBoard();
+        Refresh();
+    }
+
+    private void InitBoard()
+    {
+        backgroundTiles = new GameObject[model.Size, model.Size];
+        valueTiles = new TileView[model.Size, model.Size];
+
+        float boardSize = model.Size * tileSize + (model.Size - 1) * spacing;
+        float startX = -boardSize / 2f + tileSize / 2f;
+        float startY = boardSize / 2f - tileSize / 2f;
+
+        for (int r = 0; r < model.Size; r++)
+        {
+            for (int c = 0; c < model.Size; c++)
+            {
+                GameObject bgTile = Instantiate(backgroundTilePrefab, boardContainer);
+                RectTransform rect = bgTile.GetComponent<RectTransform>();
+                rect.anchorMin = new Vector2(0.5f, 0.5f);
+                rect.anchorMax = new Vector2(0.5f, 0.5f);
+                rect.pivot = new Vector2(0.5f, 0.5f);
+                rect.sizeDelta = new Vector2(tileSize, tileSize);
+                float x = startX + c * (tileSize + spacing);
+                float y = startY - r * (tileSize + spacing);
+                rect.anchoredPosition = new Vector2(x, y);
+                backgroundTiles[r, c] = bgTile;
+            }
+        }
+
+        for (int r = 0; r < model.Size; r++)
+        {
+            for (int c = 0; c < model.Size; c++)
+            {
+                GameObject valueTile = Instantiate(valueTilePrefab, boardContainer);
+                RectTransform rect = valueTile.GetComponent<RectTransform>();
+                rect.anchorMin = new Vector2(0.5f, 0.5f);
+                rect.anchorMax = new Vector2(0.5f, 0.5f);
+                rect.pivot = new Vector2(0.5f, 0.5f);
+                rect.sizeDelta = new Vector2(tileSize, tileSize);
+                float x = startX + c * (tileSize + spacing);
+                float y = startY - r * (tileSize + spacing);
+                rect.anchoredPosition = new Vector2(x, y);
+                TileView tv = valueTile.GetComponent<TileView>();
+                tv.SetValue(0);
+                valueTiles[r, c] = tv;
+            }
+        }
+    }
+
+    private Vector2 GetCellPosition(int r, int c)
+    {
+        return backgroundTiles[r, c].GetComponent<RectTransform>().anchoredPosition;
+    }
+
+    public void Refresh()
+    {
+        RefreshWithAnimation(false);
+        GameOverText.gameObject.SetActive(false);
+    }
+
+    public void RefreshWithAnimation(bool animate = true)
+    {
+        if (isAnimating) return;
+
+        if (animate && model.LastMoves.Count > 0)
+        {
+            StartCoroutine(AnimateMoves());
+        }
+        else
+        {
+            RefreshImmediate();
+        }
+    }
+
+    private void RefreshImmediate()
+    {
+        for (int r = 0; r < model.Size; r++)
+        {
+            for (int c = 0; c < model.Size; c++)
+            {
+                valueTiles[r, c].SetValue(model.Board[r, c], true);
+                valueTiles[r, c].GetComponent<RectTransform>().anchoredPosition = GetCellPosition(r, c);
+            }
+        }
+        UpdateUI();
+    }
+
+    private IEnumerator AnimateMoves()
+    {
+        isAnimating = true;
+
+        foreach (var move in model.LastMoves)
+        {
+            if (move.from != move.to)
+            {
+                valueTiles[move.from.x, move.from.y].SetValue(0, false);
+            }
+        }
+
+        int completedMoves = 0;
+        int totalMoves = model.LastMoves.Count;
+
+        foreach (var move in model.LastMoves)
+        {
+            Vector2 fromPos = GetCellPosition(move.from.x, move.from.y);
+            Vector2 toPos = GetCellPosition(move.to.x, move.to.y);
+            TileView movingTile = valueTiles[move.from.x, move.from.y];
+
+            movingTile.GetComponent<RectTransform>().anchoredPosition = fromPos;
+            movingTile.SetValue(move.value, false);
+            StartCoroutine(AnimateSingleMove(movingTile, fromPos, toPos, () =>
+            {
+                completedMoves++;
+            }));
+        }
+
+        while (completedMoves < totalMoves)
+        {
+            yield return null;
+        }
+
+        foreach (var move in model.LastMoves)
+        {
+            if (move.isMerge)
+            {
+                valueTiles[move.from.x, move.from.y].SetValue(0, false);
+                TileView destinationTile = valueTiles[move.to.x, move.to.y];
+                destinationTile.SetValue(move.mergedValue, false);
+                destinationTile.AnimateScalePop();
+            }
+        }
+
+      
+
+        // Запоминаем позицию новой плитки
+        Vector2Int? newTilePos = model.NewTilePosition;
+
+        for (int r = 0; r < model.Size; r++)
+        {
+            for (int c = 0; c < model.Size; c++)
+            {
+                // Сбрасываем позицию всех плиток на случай, если что-то пошло не так
+                valueTiles[r, c].GetComponent<RectTransform>().anchoredPosition = GetCellPosition(r, c);
+
+                // Если это позиция новой плитки, мы принудительно делаем её пустой (невидимой),
+                // чтобы подготовить к анимации появления.
+                if (newTilePos.HasValue && newTilePos.Value.x == r && newTilePos.Value.y == c)
+                {
+                    valueTiles[r, c].SetValue(0, false);
+                }
+                else
+                {
+                    // Для всех остальных плиток обновляем их значения.
+                    valueTiles[r, c].SetValue(model.Board[r, c], false);
+                }
+            }
+        }
+
+        yield return new WaitForSeconds(0.05f);
+
+        if (newTilePos.HasValue)
+        {
+            Vector2Int pos = newTilePos.Value;
+            int newValue = model.Board[pos.x, pos.y];
+            // Теперь анимация спауна будет выглядеть корректно.
+            valueTiles[pos.x, pos.y].AnimateSpawn(newValue);
+        }
+
+
+        UpdateUI();
+        isAnimating = false;
+    }
+
+    private IEnumerator AnimateSingleMove(TileView tile, Vector2 fromPos, Vector2 toPos, System.Action onComplete)
+    {
+        yield return StartCoroutine(tile.AnimateMoveCoroutine(fromPos, toPos));
+        onComplete?.Invoke();
+    }
+
+    private void UpdateUI()
+    {
+        scoreText.text = model.Score.ToString();
+        bestScore.text = model.MaxScore.ToString();
+    }
+
+    public void GameOver()
+    {
+        GameOverText.gameObject.SetActive(true);
+    }
+
+    public void ChangeUndoCounter(int value)
+    { 
+        _undoCounter.text = value.ToString();
+    }
+}
+using UnityEngine;
+
+public class GameController : MonoBehaviour
+{
+    [SerializeField] private GameBoardView view;
+    [SerializeField] private RewardedController _rewardedPanel;
+    [SerializeField] private InputHandler _inputHandler;
+
+    private GamePlayModel model;
+
+
+    [SerializeField] private int _rewardUndoValue = 3;
+
+    void Awake()
+    {
+        model = new GamePlayModel(4);
+    }
+
+    private void Start()
+    {
+        _inputHandler.OnMoveInput += MakeMove;
+        model.GameOver += view.GameOver;
+        model.IsUndo += view.Refresh;
+        model.UndoCountChanged += () => view.ChangeUndoCounter(model.UndoCount);
+        view.model = model;
+    }
+
+    void Update()
+    {
+
+        // Отладочная перезагрузка
+        if (Input.GetKeyDown(KeyCode.R))
+        {
+            OnRestartButton();
+        }
+    }
+
+
+
+    private void MakeMove(Vector2Int dir)
+    {
+        if (view.IsAnimating)
+        {
+            return;
+        }
+        bool moved = model.Move(dir);
+        if (moved)
+        {
+            // Используем анимированное обновление
+            view.RefreshWithAnimation(true);
+            AdManager.Instance.ShowInterstitialAd();
+        }
+    }
+
+    public void OnRestartButton()
+    {
+        model.Reset();
+        view.Refresh();
+    }
+
+    public void Reload()
+    {
+        model.Reset();
+        view.Refresh();
+        view.ChangeUndoCounter(model.UndoCount);
+    }
+
+
+
+    public void Undo()
+    {
+        if (model.IsCanUndo || model.UndoCount > 0)
+        {
+            model.Undo();
+        }
+        else
+        {
+            _rewardedPanel.ToggleRewardedPanel();
+        }
+    }
+
+    public void RestoreUndo()
+    {
+        model.RestoreUndo(_rewardUndoValue);
+    }
+}
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using UnityEngine;
+
+[Serializable]
+public class GamePlayModel
+{
+    public int Size { get; private set; } = 4;
+    public int[,] Board { get; private set; }
+    public int Score { get; private set; }
+    public int MaxScore { get; private set; }
+    public bool IsGameOver { get; private set; }
+    public int UndoCount => _undosCount;
+    public bool IsCanUndo => _isCanUndo;
+
+    private int[,] _previousBoard;
+    private int _previousScore;
+    private int _previousMaxScore;
+    private int _undosCount;
+    private bool _isCanUndo;
+
+    public event Action GameOver;
+    public event Action IsUndo;
+    public event Action UndoCountChanged;
+
+    public class TileMove
+    {
+        public Vector2Int from;
+        public Vector2Int to;
+        public int value;
+        public bool isMerge;
+        public int mergedValue;
+    }
+
+    public Vector2Int? NewTilePosition { get; private set; } = null;
+    public List<TileMove> LastMoves { get; private set; } = new List<TileMove>();
+    private System.Random rng = new System.Random();
+
+    private const string SAVE_KEY = "GameSaveData";
+
+    public GamePlayModel(int size = 4)
+    {
+        Size = size;
+        Board = new int[size, size];
+        _previousBoard = new int[size, size];
+        Load(); 
+        if (IsEmpty())
+        {
+            Reset();
+        }
+    }
+
+    public void Reset()
+    {
+        Score = 0;
+        IsGameOver = false;
+        _isCanUndo = false;
+        Array.Clear(Board, 0, Board.Length);
+        Array.Clear(_previousBoard, 0, Board.Length);
+        LastMoves.Clear();
+        NewTilePosition = null;
+        SpawnTile();
+        SpawnTile();
+        Save();
+    }
+
+    public bool Move(Vector2Int dir)
+    {
+        if (IsGameOver) return false;
+        Snapshot();
+        LastMoves.Clear();
+        NewTilePosition = null;
+
+        bool moved = false;
+        bool[,] merged = new bool[Size, Size];
+
+        int startRow = dir.y > 0 ? Size - 1 : 0;
+        int endRow = dir.y > 0 ? -1 : Size;
+        int stepRow = dir.y > 0 ? -1 : 1;
+
+        int startCol = dir.x > 0 ? Size - 1 : 0;
+        int endCol = dir.x > 0 ? -1 : Size;
+        int stepCol = dir.x > 0 ? -1 : 1;
+
+        List<TileMove> tempMoves = new List<TileMove>();
+
+        for (int r = startRow; r != endRow; r += stepRow)
+        {
+            for (int c = startCol; c != endCol; c += stepCol)
+            {
+                if (Board[r, c] == 0) continue;
+
+                int currentR = r;
+                int currentC = c;
+                Vector2Int startPos = new Vector2Int(r, c);
+                int tileValue = Board[r, c];
+                bool movedThisTile = false;
+                Vector2Int finalPos = startPos;
+
+                while (true)
+                {
+                    int nextR = currentR + dir.y;
+                    int nextC = currentC + dir.x;
+
+                    if (nextR < 0 || nextR >= Size || nextC < 0 || nextC >= Size)
+                        break;
+
+                    if (Board[nextR, nextC] == 0)
+                    {
+                        Board[nextR, nextC] = Board[currentR, currentC];
+                        Board[currentR, currentC] = 0;
+                        currentR = nextR;
+                        currentC = nextC;
+                        finalPos = new Vector2Int(currentR, currentC);
+                        movedThisTile = true;
+                        moved = true;
+                    }
+                    else if (Board[nextR, nextC] == Board[currentR, currentC] && !merged[nextR, nextC])
+                    {
+                        int newValue = Board[nextR, nextC] * 2;
+                        Board[nextR, nextC] = newValue;
+                        Board[currentR, currentC] = 0;
+                        Score += newValue;
+                        if (Score > MaxScore) MaxScore = Score; 
+                        merged[nextR, nextC] = true;
+                        movedThisTile = true;
+                        moved = true;
+
+                        tempMoves.Add(new TileMove
+                        {
+                            from = startPos,
+                            to = new Vector2Int(nextR, nextC),
+                            value = tileValue,
+                            isMerge = true,
+                            mergedValue = newValue
+                        });
+                        break;
+                    }
+                    else break;
+                }
+
+                if (movedThisTile && finalPos != startPos)
+                {
+                    bool alreadyAddedAsMerge = tempMoves.Any(m => m.from == startPos && m.isMerge);
+
+                    if (!alreadyAddedAsMerge)
+                    {
+                        tempMoves.Add(new TileMove
+                        {
+                            from = startPos,
+                            to = finalPos,
+                            value = tileValue,
+                            isMerge = false
+                        });
+                    }
+                }
+            }
+        }
+
+        LastMoves.AddRange(tempMoves);
+
+        if (moved)
+        {
+            SpawnTile();
+            if (CheckGameOver()) IsGameOver = true;
+            _isCanUndo = true;
+            Save();
+        }
+
+        return moved;
+    }
+
+    private void Snapshot()
+    {
+        _previousScore = Score;
+        _previousMaxScore = MaxScore;
+        for (int i = 0; i < Size; i++)
+        {
+            for (int j = 0; j < Size; j++)
+            {
+                _previousBoard[i, j] = Board[i, j];
+            }
+        }
+    }
+
+    public void Undo()
+    {
+        _undosCount--;
+        Score = _previousScore;
+        MaxScore = _previousMaxScore;
+        IsGameOver = false; // Если мы проиграли, откат должен это отменить
+        _isCanUndo = false;
+        // Восстанавливаем поле
+        for (int i = 0; i < Size; i++)
+        {
+            for (int j = 0; j < Size; j++)
+            {
+                Board[i, j] = _previousBoard[i, j];
+            }
+        }
+        Save();
+        IsUndo?.Invoke();
+        UndoCountChanged?.Invoke();
+
+    }
+
+    private void SpawnTile()
+    {
+        List<Vector2Int> empties = new List<Vector2Int>();
+        for (int r = 0; r < Size; r++)
+            for (int c = 0; c < Size; c++)
+                if (Board[r, c] == 0)
+                    empties.Add(new Vector2Int(r, c));
+
+        if (empties.Count == 0) return;
+
+        Vector2Int pick = empties[rng.Next(empties.Count)];
+        Board[pick.x, pick.y] = rng.NextDouble() < 0.9 ? 2 : 4;
+        NewTilePosition = pick;
+    }
+
+    public void RestoreUndo(int value)
+    {
+        _undosCount = value;
+        UndoCountChanged?.Invoke();
+    }
+
+
+
+    private bool CheckGameOver()
+    {
+        for (int r = 0; r < Size; r++)
+        {
+            for (int c = 0; c < Size; c++)
+            {
+                if (Board[r, c] == 0) return false;
+                if (r + 1 < Size && Board[r, c] == Board[r + 1, c]) return false;
+                if (c + 1 < Size && Board[r, c] == Board[r, c + 1]) return false;
+            }
+        }
+        GameOver?.Invoke();
+        return true;
+    }
+
+    private bool IsEmpty()
+    {
+        foreach (int v in Board)
+            if (v != 0)
+                return false;
+        return true;
+    }
+
+    [Serializable]
+    private class SaveData
+    {
+        public int size;
+        public int[] flatBoard;
+        public int score;
+        public int maxScore;
+        public bool gameOver;
+    }
+
+    public void Save()
+    {
+        SaveData data = new SaveData
+        {
+            size = Size,
+            flatBoard = Flatten(Board),
+            score = Score,
+            maxScore = MaxScore,
+            gameOver = IsGameOver
+        };
+
+        string json = JsonUtility.ToJson(data);
+        PlayerPrefs.SetString(SAVE_KEY, json);
+        PlayerPrefs.Save();
+    }
+
+    public void Load()
+    {
+        if (!PlayerPrefs.HasKey(SAVE_KEY)) return;
+
+        string json = PlayerPrefs.GetString(SAVE_KEY);
+        SaveData data = JsonUtility.FromJson<SaveData>(json);
+        if (data == null) return;
+
+        Size = data.size;
+        Board = Unflatten(data.flatBoard, Size);
+        Score = data.score;
+        MaxScore = data.maxScore;
+        IsGameOver = data.gameOver;
+    }
+
+    public void ClearSave()
+    {
+        PlayerPrefs.DeleteKey(SAVE_KEY);
+    }
+
+    private int[] Flatten(int[,] board)
+    {
+        int[] flat = new int[Size * Size];
+        int i = 0;
+        for (int r = 0; r < Size; r++)
+            for (int c = 0; c < Size; c++)
+                flat[i++] = board[r, c];
+        return flat;
+    }
+
+    private int[,] Unflatten(int[] flat, int size)
+    {
+        int[,] grid = new int[size, size];
+        for (int i = 0; i < flat.Length; i++)
+            grid[i / size, i % size] = flat[i];
+        return grid;
+    }
+}
+using TMPro;
+using UnityEngine;
+using UnityEngine.UI;
+using System.Collections;
+
+public class TileView : MonoBehaviour
+{
+    [SerializeField] private Image background;
+    [SerializeField] private TextMeshProUGUI valueText;
+    [SerializeField] private float moveSpeed = 1500f; // пиксели в секунду
+    [SerializeField] private float scaleAnimDuration = 0.15f;
+
+    private int value;
+    private RectTransform rectTransform;
+    private Coroutine currentAnimation;
+
+    private void Awake()
+    {
+        rectTransform = GetComponent<RectTransform>();
+    }
+
+    public void SetValue(int newValue, bool animate = false)
+    {
+        value = newValue;
+
+        if (value == 0)
+        {
+            // Плитка пустая - делаем невидимой через прозрачность
+            valueText.text = "";
+            background.color = new Color32(0, 0, 0, 0);
+            valueText.color = new Color32(0, 0, 0, 0);
+            // Не отключаем GameObject чтобы не прерывать анимации
+        }
+        else
+        {
+            valueText.text = value.ToString();
+            // ВАЖНО: Всегда устанавливаем правильный цвет текста и фона
+            Color32 tileColor = GetColor(value);
+            valueText.color = GetColor(value);
+            background.color = tileColor;
+
+            if (animate)
+            {
+                // Плавное появление
+                if (currentAnimation != null)
+                    StopCoroutine(currentAnimation);
+                currentAnimation = StartCoroutine(FadeInCoroutine(tileColor));
+            }
+            else
+            {
+                // Мгновенное отображение - устанавливаем полную непрозрачность
+                background.color = tileColor;
+                valueText.color = GetColor(value);
+            }
+        }
+    }
+
+    // Анимация движения
+    public void AnimateMove(Vector2 targetPosition, bool isMerge, System.Action onComplete = null)
+    {
+        if (currentAnimation != null)
+            StopCoroutine(currentAnimation);
+
+        currentAnimation = StartCoroutine(AnimateMoveCoroutine(rectTransform.anchoredPosition, targetPosition, onComplete));
+    }
+
+    public IEnumerator AnimateMoveCoroutine(Vector2 fromPosition, Vector2 toPosition, System.Action onComplete = null)
+    {
+        Vector2 startPosition = fromPosition;
+        float distance = Vector2.Distance(startPosition, toPosition);
+        float duration = distance / moveSpeed;
+
+        // Минимальная и максимальная длительность
+        duration = Mathf.Clamp(duration, 0.05f, 0.3f);
+
+        float elapsed = 0f;
+
+        while (elapsed < duration)
+        {
+            elapsed += Time.deltaTime;
+            float t = Mathf.Clamp01(elapsed / duration);
+
+            // Ease-out cubic для плавности
+            t = 1f - Mathf.Pow(1f - t, 3f);
+
+            rectTransform.anchoredPosition = Vector2.Lerp(startPosition, toPosition, t);
+            yield return null;
+        }
+
+        rectTransform.anchoredPosition = toPosition;
+        currentAnimation = null;
+        onComplete?.Invoke();
+    }
+
+    // Анимация pop при слиянии
+    public void AnimateScalePop()
+    {
+        if (currentAnimation != null)
+            StopCoroutine(currentAnimation);
+
+        currentAnimation = StartCoroutine(ScaleAnimation());
+    }
+
+    // Анимация появления новой плитки
+    // Тепер цей метод приймає значення нової плитки
+    public void AnimateSpawn(int newValue)
+    {
+        if (currentAnimation != null)
+            StopCoroutine(currentAnimation);
+        currentAnimation = StartCoroutine(SpawnCoroutine(newValue));
+    }
+
+    // Корутина також приймає значення
+    private IEnumerator SpawnCoroutine(int newValue)
+    {
+        // Спочатку встановлюємо значення та масштаб 0
+        value = newValue;
+
+        // Тепер налаштовуємо вигляд (колір, текст).
+        // Плитка ще невидима, бо її масштаб 0.
+        if (value != 0)
+        {
+            transform.localScale = Vector3.zero;
+            valueText.text = value.ToString();
+            Color32 tileColor = GetColor(value);
+            background.color = tileColor;
+            valueText.color = GetColor(value);
+        }
+        else
+        {
+            valueText.text = "";
+            background.color = new Color32(0, 0, 0, 0);
+        }
+
+        // Запускаємо анімацію масштабування від 0 до 1
+        float elapsed = 0f;
+        while (elapsed < scaleAnimDuration)
+        {
+            elapsed += Time.deltaTime;
+            float t = elapsed / scaleAnimDuration;
+            t = 1f - Mathf.Pow(1f - t, 2f);
+
+            float scale = Mathf.Lerp(0f, 1f, t);
+            transform.localScale = Vector3.one * scale;
+            yield return null;
+        }
+
+        transform.localScale = Vector3.one;
+        currentAnimation = null;
+    }
+
+    // Анимация "pop" при слиянии
+    private IEnumerator ScaleAnimation()
+    {
+        float elapsed = 0f;
+        float halfDuration = scaleAnimDuration / 2f;
+
+        // Увеличиваем
+        while (elapsed < halfDuration)
+        {
+            elapsed += Time.deltaTime;
+            float t = elapsed / halfDuration;
+            transform.localScale = Vector3.Lerp(Vector3.one, Vector3.one * 1.2f, t);
+            yield return null;
+        }
+
+        elapsed = 0f;
+        // Уменьшаем обратно
+        while (elapsed < halfDuration)
+        {
+            elapsed += Time.deltaTime;
+            float t = elapsed / halfDuration;
+            transform.localScale = Vector3.Lerp(Vector3.one * 1.2f, Vector3.one, t);
+            yield return null;
+        }
+
+        transform.localScale = Vector3.one;
+        currentAnimation = null;
+    }
+
+    private IEnumerator FadeInCoroutine(Color32 targetColor)
+    {
+        Color32 startColor = new Color32(targetColor.r, targetColor.g, targetColor.b, 0);
+        Color32 targetTextColor = GetColor(value);
+        Color32 startTextColor = new Color32(targetTextColor.r, targetTextColor.g, targetTextColor.b, 0);
+
+        float elapsed = 0f;
+        while (elapsed < scaleAnimDuration)
+        {
+            elapsed += Time.deltaTime;
+            float t = elapsed / scaleAnimDuration;
+
+            // Анимируем прозрачность фона и текста
+            background.color = Color.Lerp(startColor, targetColor, t);
+            valueText.color = Color.Lerp(startTextColor, targetTextColor, t);
+            yield return null;
+        }
+
+        background.color = targetColor;
+        valueText.color = targetTextColor;
+        currentAnimation = null;
+    }
+
+    private Color32 GetColor(int val)
+    {
+        switch (val)
+        {
+            case 2: return new Color32(0, 180, 255, 255);   // світло-блакитний неон
+            case 4: return new Color32(255, 150, 60, 255);  // помаранчевий неон
+            case 8: return new Color32(255, 70, 180, 255);  // рожево-фіолетовий неон
+            case 16: return new Color32(50, 255, 70, 255);  // яскравий малиновий
+            case 32: return new Color32(0, 255, 180, 255);   // м’ятно-зелений неон
+            case 64: return new Color32(255, 94, 0, 255);   // бірюзовий
+            case 128: return new Color32(255, 200, 50, 255);  // жовтий неон
+            case 256: return new Color32(255, 100, 255, 255); // пурпуровий
+            case 512: return new Color32(150, 100, 255, 255); // ліловий
+            case 1024: return new Color32(80, 160, 255, 255);  // синій неон
+            case 2048: return new Color32(255, 255, 255, 255); // білий — фінальна плитка
+            default: return new Color32(255, 255, 255, 255);    // темно-синій фон
+        }
+    }
+
+}
+using UnityEngine;
+
+public class FpsUnlocker : MonoBehaviour
+{
+    private void Awake()
+    {
+        Application.targetFrameRate = 120;
+    }
+}
+using UnityEngine;
+using System;
+
+public class InputHandler : MonoBehaviour
+{
+    public event Action<Vector2Int> OnMoveInput; // Викликається при свайпі або натисканні клавіші
+
+    [Header("Swipe Settings")]
+    [SerializeField] private float minSwipeDistance = 50f; // Мінімальна довжина свайпу в пікселях
+    public bool Active { get; set; } = true;
+
+    private Vector2 startTouchPos;
+    private Vector2 endTouchPos;
+    private bool isSwiping = false;
+
+    void Update()
+    {
+        if (!Active)
+        {
+            isSwiping = false; 
+            return;
+        }
+        // Загальна клавіатура (завжди доступна у збірках, де є клавіатура)
+        HandleKeyboardInput();
+
+        // Платформо-специфічні обробники:
+#if UNITY_ANDROID || UNITY_IOS
+        HandleTouchInput();
+#endif
+
+#if UNITY_STANDALONE || UNITY_EDITOR || UNITY_WEBGL
+        HandleMouseInput();
+#endif
+    }
+
+    // --- 1️⃣ Клавіатура (завжди) ---
+    private void HandleKeyboardInput()
+    {
+        // Якщо потрібно перевести up/down як у твоєму проекті — роби заміну тут.
+        if (Input.GetKeyDown(KeyCode.LeftArrow)) OnMoveInput?.Invoke(Vector2Int.left);
+        if (Input.GetKeyDown(KeyCode.RightArrow)) OnMoveInput?.Invoke(Vector2Int.right);
+        if (Input.GetKeyDown(KeyCode.UpArrow)) OnMoveInput?.Invoke(Vector2Int.down);
+        if (Input.GetKeyDown(KeyCode.DownArrow)) OnMoveInput?.Invoke(Vector2Int.up);
+    }
+
+#if UNITY_ANDROID || UNITY_IOS
+    // --- 2️⃣ Сенсор (тільки мобільні збірки) ---
+    private void HandleTouchInput()
+    {
+        if (Input.touchCount == 0) return;
+
+        Touch touch = Input.GetTouch(0);
+
+        switch (touch.phase)
+        {
+            case TouchPhase.Began:
+                startTouchPos = touch.position;
+                isSwiping = true;
+                break;
+
+            case TouchPhase.Ended:
+            case TouchPhase.Canceled:
+                if (!isSwiping) return;
+                endTouchPos = touch.position;
+                DetectSwipeDirection(endTouchPos - startTouchPos);
+                isSwiping = false;
+                break;
+        }
+    }
+#endif
+
+#if UNITY_STANDALONE || UNITY_EDITOR || UNITY_WEBGL
+    // --- 3️⃣ Миша (для редактора / ПК / WebGL) ---
+    private void HandleMouseInput()
+    {
+        if (Input.GetMouseButtonDown(0))
+        {
+            startTouchPos = Input.mousePosition;
+            isSwiping = true;
+        }
+
+        if (Input.GetMouseButtonUp(0) && isSwiping)
+        {
+            endTouchPos = Input.mousePosition;
+            DetectSwipeDirection(endTouchPos - startTouchPos);
+            isSwiping = false;
+        }
+    }
+#endif
+
+    // --- Основна логіка розпізнавання свайпу ---
+    private void DetectSwipeDirection(Vector2 delta)
+    {
+        if (delta.magnitude < minSwipeDistance)
+            return; // надто короткий свайп
+
+        delta.Normalize();
+
+        if (Mathf.Abs(delta.x) > Mathf.Abs(delta.y))
+        {
+            // Горизонтальний свайп
+            if (delta.x > 0)
+                OnMoveInput?.Invoke(Vector2Int.right);
+            else
+                OnMoveInput?.Invoke(Vector2Int.left);
+        }
+        else
+        {
+            // Вертикальний свайп
+            if (delta.y > 0)
+                OnMoveInput?.Invoke(Vector2Int.down);
+            else
+                OnMoveInput?.Invoke(Vector2Int.up);
+        }
+    }
+}
+using UnityEngine;
+
+public class OptionsController : MonoBehaviour
+{
+    [SerializeField] private GameObject _optionsPanel;
+    [SerializeField] private InputHandler _inputHandler;
+
+    private void Start()
+    {
+        _optionsPanel.SetActive(false);
+    }
+
+    public void ToggleOptionsPanel()
+    {
+        _optionsPanel.SetActive(!_optionsPanel.activeSelf);
+        _inputHandler.Active = !_inputHandler.Active;
+    }
+
+    public void OpenPrivacyPolicy()
+    {
+        Application.OpenURL("https://docs.google.com/document/d/1zeeJ2kKRbaKkHCSyXlcAdQ6rp8651tCChpjEkYAQgHU/edit?usp=sharing");
+    }
+
+    public void RateApp()
+    {
+        Application.OpenURL("https://play.google.com/store/apps/details?id=com.uniteditforce.twentyfortyeight");
+    }
+}
+using UnityEngine;
+
+public class RewardedController : MonoBehaviour
+{
+    [SerializeField] private GameObject _rewardePanel;
+    [SerializeField] private InputHandler _inputHandler;
+    [SerializeField] private GameController _controller;
+
+    private void Start()
+    {
+        _rewardePanel.SetActive(false);
+    }
+
+    public void ToggleRewardedPanel()
+    {
+        _rewardePanel.SetActive(!_rewardePanel.activeSelf);
+        _inputHandler.Active = !_inputHandler.Active;
+    }
+
+    public void WatchRewarded()
+    {
+        AdManager.Instance.ShowRewardedAd((_) =>
+        {
+            _controller.RestoreUndo();
+            ToggleRewardedPanel();
+        });
+    }
+
+}
+using TMPro;
+using UnityEngine;
+using UnityEngine.UI;
+
+public class testcell : MonoBehaviour
+{
+    // Я переименовал 'cell' в 'cellPrefab' для большей ясности
+    public GameObject cellPrefab;
+
+    void Start()
+    {
+        // 1. Исправлен цикл, чтобы включать 2048
+        for (int i = 2; i <= 2048; i *= 2)
+        {
+            var cellObj = Instantiate(cellPrefab, transform);
+
+            Image background = cellObj.GetComponent<Image>();
+            // 3. Используем TextMeshProUGUI
+            TextMeshProUGUI text = cellObj.GetComponentInChildren<TextMeshProUGUI>();
+
+            if (background != null && text != null)
+            {
+                Color tileColor = GetColor(i);
+                background.color = tileColor;
+
+                // 2. Добавлено отображение значения плитки
+                text.text = i.ToString();
+
+
+                text.color = GetColor(i);
+            }
+        }
+    }
+
+    private Color32 GetColor(int val)
+    {
+        switch (val)
+        {
+            case 2: return new Color32(0, 255, 255, 255);   // Яскравий Блакитний (Cyan)
+            case 4: return new Color32(128, 255, 0, 255);   // Неоновий Зелений
+            case 8: return new Color32(0, 255, 128, 255);   // Весняний Зелений
+            case 16: return new Color32(255, 255, 0, 255);   // Жовтий
+            case 32: return new Color32(255, 150, 0, 255);   // Помаранчевий
+            case 64: return new Color32(255, 100, 0, 255);   // Червоно-помаранчевий
+            case 128: return new Color32(255, 0, 0, 255);       // Червоний
+            case 256: return new Color32(255, 0, 100, 255);   // Малиновий
+            case 512: return new Color32(170, 0, 255, 255);   // Пурпурний
+            case 1024: return new Color32(80, 80, 255, 255);    // Глибокий Синій
+            case 2048: return new Color32(255, 255, 255, 255); // Сяючий Білий
+            default: return new Color32(30, 30, 60, 255);      // Колір за замовчуванням
+        }
+    }
+}
