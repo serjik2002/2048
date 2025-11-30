@@ -22,6 +22,7 @@ public class GameController : MonoBehaviour
         model.GameOver += view.GameOver;
         model.IsUndo += view.Refresh;
         model.UndoCountChanged += () => view.ChangeUndoCounter(model.UndoCount);
+        view.ChangeUndoCounter(model.UndoCount);
         view.model = model;
     }
 

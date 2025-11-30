@@ -17,7 +17,7 @@ public class GamePlayModel
     private int[,] _previousBoard;
     private int _previousScore;
     private int _previousMaxScore;
-    private int _undosCount = 3;
+    private int _undosCount;
     private bool _isCanUndo;
 
     public event Action GameOver;
@@ -44,6 +44,7 @@ public class GamePlayModel
         Size = size;
         Board = new int[size, size];
         _previousBoard = new int[size, size];
+        _undosCount = 3;
         Load(); 
         if (IsEmpty())
         {
